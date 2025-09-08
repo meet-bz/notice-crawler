@@ -1,6 +1,17 @@
 # 공지사항 크롤링 플랫폼 📰
 
-사용자가 입력한 웹사이트의 공지사항을 자동으로 크롤링하고, 선택한 요소의 데이터를 추출하여 카카오톡 채널로 전송하는 플랫폼입니다.
+사용자가 입력한### 환경 변수 설정
+프로젝트 루트에 `.env.local` 파일을 생성하고 `.env.example` 파일을 참고하여 실제 API 키와 설정값을 입력하세요:
+
+```bash
+# .env.example 파일을 복사
+cp .env.example .env.local
+```
+
+**필수 설정:**
+- **카카오 API 키**: Kakao Developers에서 발급
+- **Firebase 설정**: Firebase Console에서 프로젝트 생성 후 설정값 복사
+
 
 ## ✨ 주요 기능
 
@@ -36,6 +47,10 @@ KAKAO_CHANNEL_ID=your_channel_id_here
 NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id
 ```
 
 3. **개발 서버 실행**
@@ -94,19 +109,6 @@ npm start
 npm run lint
 ```
 
-## 🚀 배포
-
-### Vercel 배포 (권장)
-
-1. [Vercel](https://vercel.com)에 프로젝트 연결
-2. 환경 변수 설정
-3. 자동 배포
-
-### 기타 플랫폼
-
-- **Netlify**: `npm run build` 후 dist 폴더 배포
-- **Railway**: Docker 지원
-- **AWS Amplify**: Next.js 지원
 
 ## 🔮 향후 계획
 
