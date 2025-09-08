@@ -56,14 +56,20 @@ export default function CrawlPage() {
     }
   };
 
-  const getElementSelectedType = useCallback((selector: string): string | null => {
+  const getElementSelectedTypes = useCallback((selector: string): string[] => {
+    const types: string[] = [];
     for (const [type, sel] of Object.entries(selectors)) {
       if (sel.split(',').map(s => s.trim()).includes(selector)) {
-        return type;
+        types.push(type);
       }
     }
-    return null;
+    return types;
   }, [selectors]);
+
+  const getElementSelectedType = useCallback((selector: string): string | null => {
+    const types = getElementSelectedTypes(selector);
+    return types.length > 0 ? types[0] : null;
+  }, [getElementSelectedTypes]);
 
   const isElementSelected = useCallback((selector: string): boolean => {
     return Object.values(selectors).some(sel =>
@@ -71,48 +77,185 @@ export default function CrawlPage() {
     );
   }, [selectors]);
 
+  const applyElementBorder = useCallback((element: HTMLElement, selector: string) => {
+    const selectedTypes = getElementSelectedTypes(selector);
+    if (selectedTypes.length === 0) {
+      element.style.border = '';
+      element.removeAttribute('data-original-border');
+      element.removeAttribute('data-selected-types');
+      return;
+    }
+
+    // 다중 선택 시 테두리 중첩 (최대 3개까지)
+    const maxBorders = 3;
+    const displayTypes = selectedTypes.slice(0, maxBorders);
+    const borders = displayTypes.map(type => `2px solid ${colorMap[type] || 'gray'}`);
+
+    element.style.border = borders.join(' ');
+    element.setAttribute('data-selected-types', selectedTypes.join(','));
+
+    // 선택된 타입 정보 표시 (툴팁)
+    element.title = `선택된 타입: ${selectedTypes.join(', ')}`;
+  }, [getElementSelectedTypes, colorMap]);
+
+  const combineSelectors = (existing: string, newSelector: string): string => {
+    if (!existing) return newSelector;
+    const selectors = existing.split(',').map(s => s.trim()).filter(s => s);
+    if (!selectors.includes(newSelector)) {
+      selectors.push(newSelector);
+    }
+
+    // 중복 제거
+    const uniqueSelectors = [...new Set(selectors)];
+
+    // 공통 패턴으로 최적화 시도
+    const optimized = optimizeSelectors(uniqueSelectors);
+    return optimized.join(', ');
+  };
+
+  const optimizeSelectors = (selectors: string[]): string[] => {
+    if (selectors.length <= 1) return selectors;
+
+    // 같은 부모를 공유하는 nth-child 패턴 찾기
+    const nthChildPattern = selectors.filter(s => s.includes(':nth-child'));
+    if (nthChildPattern.length > 1) {
+      const optimized = optimizeNthChildSelectors(nthChildPattern);
+      const others = selectors.filter(s => !s.includes(':nth-child'));
+      return [...optimized, ...others];
+    }
+
+    // 같은 클래스 패턴 찾기
+    const classPattern = selectors.filter(s => s.startsWith('.') && !s.includes(' '));
+    if (classPattern.length > 1) {
+      const optimized = optimizeClassSelectors(classPattern);
+      const others = selectors.filter(s => !s.includes(' ') || !s.startsWith('.'));
+      return [...optimized, ...others];
+    }
+
+    return selectors;
+  };
+
+  const optimizeNthChildSelectors = (selectors: string[]): string[] => {
+    const parentMap: { [key: string]: number[] } = {};
+
+    selectors.forEach(selector => {
+      const match = selector.match(/^(.+):nth-child\((\d+)\)$/);
+      if (match) {
+        const parent = match[1];
+        const index = parseInt(match[2]);
+        if (!parentMap[parent]) parentMap[parent] = [];
+        parentMap[parent].push(index);
+      }
+    });
+
+    const optimized: string[] = [];
+    for (const [parent, indices] of Object.entries(parentMap)) {
+      if (indices.length > 1) {
+        // 연속된 인덱스 그룹화
+        indices.sort((a, b) => a - b);
+        const groups: number[][] = [];
+        let currentGroup: number[] = [indices[0]];
+
+        for (let i = 1; i < indices.length; i++) {
+          if (indices[i] === currentGroup[currentGroup.length - 1] + 1) {
+            currentGroup.push(indices[i]);
+          } else {
+            groups.push(currentGroup);
+            currentGroup = [indices[i]];
+          }
+        }
+        groups.push(currentGroup);
+
+        groups.forEach(group => {
+          if (group.length === 1) {
+            optimized.push(`${parent}:nth-child(${group[0]})`);
+          } else if (group.length === 2) {
+            optimized.push(`${parent}:nth-child(${group[0]}), ${parent}:nth-child(${group[1]})`);
+          } else {
+            optimized.push(`${parent}:nth-child(n+${group[0]}):nth-child(-n+${group[group.length - 1]})`);
+          }
+        });
+      } else {
+        optimized.push(`${parent}:nth-child(${indices[0]})`);
+      }
+    }
+
+    return optimized;
+  };
+
+  const optimizeClassSelectors = (selectors: string[]): string[] => {
+    // 같은 클래스를 공유하는 요소들 그룹화
+    const classMap: { [key: string]: string[] } = {};
+    selectors.forEach(selector => {
+      if (!classMap[selector]) classMap[selector] = [];
+      classMap[selector].push(selector);
+    });
+
+    const optimized: string[] = [];
+    for (const [className, instances] of Object.entries(classMap)) {
+      if (instances.length > 1) {
+        optimized.push(className);
+      } else {
+        optimized.push(...instances);
+      }
+    }
+
+    return optimized;
+  };
+
   const handleIframeClick = useCallback((e: Event) => {
     e.preventDefault();
     if (!currentMode) return;
     const target = e.target as HTMLElement;
     const selector = getSelector(target);
+    const selectedTypes = getElementSelectedTypes(selector);
+
     setSelectors(prev => {
       const currentSelectors = prev[currentMode].split(',').map(s => s.trim()).filter(s => s);
-      if (currentSelectors.includes(selector)) {
-        // 선택 해제
+
+      if (selectedTypes.includes(currentMode)) {
+        // 현재 모드로 이미 선택된 경우 - 선택 해제 또는 세부요소 선택 강화
+        const mouseEvent = e as MouseEvent;
+        if (mouseEvent.detail === 2 || mouseEvent.ctrlKey) { // 더블클릭 또는 Ctrl+클릭으로 세부요소 선택 강화
+          const refinedSelector = getRefinedSelector(target);
+          if (refinedSelector !== selector) {
+            const newSelectors = currentSelectors.map(s => s === selector ? refinedSelector : s);
+            // 중복 제거
+            const uniqueSelectors = [...new Set(newSelectors)];
+            applyElementBorder(target, refinedSelector);
+            return {
+              ...prev,
+              [currentMode]: uniqueSelectors.join(', ')
+            };
+          }
+        }
+
+        // 일반 클릭 - 현재 모드에서 선택 해제
         const newSelectors = currentSelectors.filter(s => s !== selector);
-        target.style.border = '';
-        target.removeAttribute('data-original-border');
+        const remainingTypes = selectedTypes.filter(type => type !== currentMode);
+        if (remainingTypes.length > 0) {
+          // 다른 타입으로 여전히 선택되어 있음
+          applyElementBorder(target, selector);
+        } else {
+          // 완전히 선택 해제
+          target.style.border = '';
+          target.removeAttribute('data-original-border');
+        }
         return {
           ...prev,
           [currentMode]: newSelectors.join(', ')
         };
       } else {
-        // 선택 추가
-        const selectedType = getElementSelectedType(selector);
-        if (selectedType) {
-          // 이미 다른 타입으로 선택된 경우, 해당 타입에서 제거하고 현재 타입으로 추가
-          const updatedSelectors = { ...prev };
-          for (const [type, sel] of Object.entries(updatedSelectors)) {
-            if (sel.split(',').map(s => s.trim()).includes(selector)) {
-              const typeSelectors = sel.split(',').map(s => s.trim()).filter(s => s !== selector);
-              updatedSelectors[type] = typeSelectors.join(', ');
-            }
-          }
-          updatedSelectors[currentMode] = combineSelectors(updatedSelectors[currentMode], selector);
-          target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
-          return updatedSelectors;
-        } else {
-          // 새로 선택
-          target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
-          return {
-            ...prev,
-            [currentMode]: combineSelectors(prev[currentMode], selector)
-          };
-        }
+        // 현재 모드로 선택되지 않은 경우 - 추가 (중복 방지)
+        const newSelectorString = combineSelectors(prev[currentMode], selector);
+        applyElementBorder(target, selector);
+        return {
+          ...prev,
+          [currentMode]: newSelectorString
+        };
       }
     });
-  }, [currentMode, getElementSelectedType, colorMap]);
+  }, [currentMode, getElementSelectedTypes, applyElementBorder, combineSelectors]);
 
   const handleIframeMouseOver = useCallback((e: Event) => {
     const target = e.target as HTMLElement;
@@ -120,9 +263,11 @@ export default function CrawlPage() {
 
     // 현재 선택 모드가 있고, 아직 선택되지 않은 요소만 호버링
     if (currentMode && !isElementSelected(selector)) {
-      // 호버링 전 원래 테두리 색상 저장
-      const originalBorder = target.style.border;
-      target.setAttribute('data-original-border', originalBorder);
+      // 호버링 전 원래 테두리 색상 저장 (없는 경우에만)
+      const currentBorder = target.style.border;
+      if (!target.hasAttribute('data-original-border')) {
+        target.setAttribute('data-original-border', currentBorder);
+      }
       target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
     }
   }, [currentMode, isElementSelected, colorMap]);
@@ -131,8 +276,8 @@ export default function CrawlPage() {
     const target = e.target as HTMLElement;
     const selector = getSelector(target);
 
-    // 선택되지 않은 요소만 테두리 제거
     if (!isElementSelected(selector)) {
+      // 선택되지 않은 요소는 테두리 제거
       target.style.border = '';
     } else {
       // 선택된 요소는 원래 테두리 색상으로 복원
@@ -141,13 +286,10 @@ export default function CrawlPage() {
         target.style.border = originalBorder;
       } else {
         // 원래 테두리가 없으면 선택된 타입의 색상으로 설정
-        const selectedType = getElementSelectedType(selector);
-        if (selectedType) {
-          target.style.border = `2px solid ${colorMap[selectedType] || 'red'}`;
-        }
+        applyElementBorder(target, selector);
       }
     }
-  }, [isElementSelected, getElementSelectedType, colorMap]);
+  }, [isElementSelected, applyElementBorder]);
 
   useEffect(() => {
     if (iframeRef.current && html) {
@@ -180,6 +322,17 @@ export default function CrawlPage() {
     if (iframeRef.current && html) {
       const doc = iframeRef.current.contentDocument;
       if (doc) {
+        // 호버링 상태 초기화 - 모든 요소의 data-original-border 속성 제거
+        const allElements = doc.querySelectorAll('*');
+        allElements.forEach(el => {
+          const element = el as HTMLElement;
+          const originalBorder = element.getAttribute('data-original-border');
+          if (originalBorder !== null) {
+            element.style.border = originalBorder;
+            element.removeAttribute('data-original-border');
+          }
+        });
+
         // 콜백 함수가 변경되었으므로 이벤트 리스너를 업데이트
         // 기존 리스너 제거 후 새 리스너 추가
         doc.removeEventListener('click', handleIframeClick);
@@ -189,9 +342,47 @@ export default function CrawlPage() {
         doc.addEventListener('click', handleIframeClick);
         doc.addEventListener('mouseover', handleIframeMouseOver);
         doc.addEventListener('mouseout', handleIframeMouseOut);
+
+        // 스타일 업데이트 (직접 실행)
+        // 모든 요소의 테두리와 데이터 속성 초기화
+        allElements.forEach(el => {
+          const element = el as HTMLElement;
+          element.style.border = '';
+          element.removeAttribute('data-selected-types');
+          element.removeAttribute('data-original-border');
+          element.title = '';
+        });
+
+        // 각 셀렉터별로 선택된 타입들을 수집
+        const selectorTypeMap: { [selector: string]: string[] } = {};
+
+        Object.entries(selectors).forEach(([type, sel]) => {
+          if (sel) {
+            const selectorList = sel.split(',').map(s => s.trim()).filter(s => s);
+            selectorList.forEach(selector => {
+              if (!selectorTypeMap[selector]) {
+                selectorTypeMap[selector] = [];
+              }
+              selectorTypeMap[selector].push(type);
+            });
+          }
+        });
+
+        // 각 셀렉터에 대해 테두리 적용
+        Object.entries(selectorTypeMap).forEach(([selector, types]) => {
+          try {
+            const elements = doc.querySelectorAll(selector);
+            elements.forEach(el => {
+              const element = el as HTMLElement;
+              applyElementBorder(element, selector);
+            });
+          } catch (e) {
+            // 유효하지 않은 셀렉터 무시
+          }
+        });
       }
     }
-  }, [html, handleIframeClick, handleIframeMouseOver, handleIframeMouseOut]);
+  }, [html, handleIframeClick, handleIframeMouseOver, handleIframeMouseOut, selectors, applyElementBorder]);
 
   const handleCrawl = async () => {
     const activeSelectors = Object.values(selectors).filter(s => s.trim() !== '');
@@ -240,7 +431,7 @@ export default function CrawlPage() {
     if (element.id) {
       return `#${element.id}`;
     }
-    
+
     // 클래스명이 있으면 사용
     if (element.className && typeof element.className === 'string') {
       const classes = element.className.trim().split(/\s+/).filter(cls => cls);
@@ -248,32 +439,86 @@ export default function CrawlPage() {
         return `${element.tagName.toLowerCase()}.${classes.join('.')}`;
       }
     }
-    
+
     // 고유한 경로 생성
     const path: string[] = [];
     let current: HTMLElement | null = element;
-    
+
     while (current && current.parentElement) {
       let selector = current.tagName.toLowerCase();
-      
+
       // 형제 요소들 중에서 몇 번째인지 확인
       if (current.parentElement) {
         const siblings = Array.from(current.parentElement.children);
         const index = siblings.indexOf(current);
-        if (siblings.filter(sibling => 
+        if (siblings.filter(sibling =>
           (sibling as HTMLElement).tagName === current!.tagName
         ).length > 1) {
           selector += `:nth-child(${index + 1})`;
         }
       }
-      
+
       path.unshift(selector);
       current = current.parentElement;
-      
+
       // 너무 깊어지지 않도록 제한
       if (path.length > 5) break;
     }
-    
+
+    return path.join(' > ') || element.tagName.toLowerCase();
+  };
+
+  const getRefinedSelector = (element: HTMLElement): string => {
+    // 더 구체적인 셀렉터 생성
+    if (element.id) {
+      return `#${element.id}`;
+    }
+
+    // 클래스와 태그네임 조합
+    if (element.className && typeof element.className === 'string') {
+      const classes = element.className.trim().split(/\s+/).filter(cls => cls);
+      if (classes.length > 0) {
+        return `${element.tagName.toLowerCase()}.${classes.join('.')}`;
+      }
+    }
+
+    // 부모 요소 정보를 포함한 더 구체적인 경로 생성
+    const path: string[] = [];
+    let current: HTMLElement | null = element;
+    let depth = 0;
+
+    while (current && current.parentElement && depth < 8) { // 더 깊은 경로 허용
+      let selector = current.tagName.toLowerCase();
+
+      // 클래스 정보 추가
+      if (current.className && typeof current.className === 'string') {
+        const classes = current.className.trim().split(/\s+/).filter(cls => cls);
+        if (classes.length > 0) {
+          selector += `.${classes[0]}`; // 첫 번째 클래스만 사용
+        }
+      }
+
+      // 형제 요소들 중에서 몇 번째인지 확인
+      if (current.parentElement) {
+        const siblings = Array.from(current.parentElement.children);
+        const index = siblings.indexOf(current);
+        const sameTagSiblings = siblings.filter(sibling =>
+          (sibling as HTMLElement).tagName === current!.tagName
+        );
+
+        if (sameTagSiblings.length > 1) {
+          selector += `:nth-child(${index + 1})`;
+        }
+      }
+
+      path.unshift(selector);
+      current = current.parentElement;
+      depth++;
+
+      // 너무 깊어지지 않도록 제한 (원래보다 더 깊게)
+      if (depth >= 8) break;
+    }
+
     return path.join(' > ') || element.tagName.toLowerCase();
   };
 
@@ -281,153 +526,52 @@ export default function CrawlPage() {
     if (iframeRef.current && html) {
       const doc = iframeRef.current.contentDocument;
       if (doc) {
-        // 모든 요소 border 초기화
+        // 모든 요소의 테두리와 데이터 속성 초기화
         const allElements = doc.querySelectorAll('*');
-        allElements.forEach(el => (el as HTMLElement).style.border = '');
+        allElements.forEach(el => {
+          const element = el as HTMLElement;
+          element.style.border = '';
+          element.removeAttribute('data-selected-types');
+          element.removeAttribute('data-original-border');
+          element.title = '';
+        });
 
-        // 각 타입별로 테두리 적용
+        // 각 셀렉터별로 선택된 타입들을 수집
+        const selectorTypeMap: { [selector: string]: string[] } = {};
+
         Object.entries(selectors).forEach(([type, sel]) => {
           if (sel) {
             const selectorList = sel.split(',').map(s => s.trim()).filter(s => s);
             selectorList.forEach(selector => {
-              try {
-                const elements = doc.querySelectorAll(selector);
-                elements.forEach(el => (el as HTMLElement).style.border = `2px solid ${colorMap[type] || 'red'}`);
-              } catch (e) {
-                // 유효하지 않은 셀렉터 무시
+              if (!selectorTypeMap[selector]) {
+                selectorTypeMap[selector] = [];
               }
+              selectorTypeMap[selector].push(type);
             });
+          }
+        });
+
+        // 각 셀렉터에 대해 테두리 적용
+        Object.entries(selectorTypeMap).forEach(([selector, types]) => {
+          try {
+            const elements = doc.querySelectorAll(selector);
+            elements.forEach(el => {
+              const element = el as HTMLElement;
+              applyElementBorder(element, selector);
+            });
+          } catch (e) {
+            // 유효하지 않은 셀렉터 무시
           }
         });
       }
     }
-  }, [html, selectors, colorMap]);
+  }, [html, selectors, applyElementBorder]);
 
   const updateSelector = useCallback((type: string, selector: string) => {
     setSelectors(prev => ({ ...prev, [type]: selector }));
     // CSS 변경 시 iframe 내 요소들 스타일 업데이트
     setTimeout(() => updateIframeStyles(), 0);
   }, [updateIframeStyles]);
-
-  const combineSelectors = (existing: string, newSelector: string): string => {
-    if (!existing) return newSelector;
-    const selectors = existing.split(',').map(s => s.trim()).filter(s => s);
-    if (!selectors.includes(newSelector)) {
-      selectors.push(newSelector);
-    }
-
-    // 중복 제거
-    const uniqueSelectors = [...new Set(selectors)];
-
-    // 공통 패턴으로 최적화 시도
-    const optimized = optimizeSelectors(uniqueSelectors);
-    return optimized.join(', ');
-  };
-
-  const optimizeSelectors = (selectors: string[]): string[] => {
-    if (selectors.length <= 1) return selectors;
-
-    // 같은 부모를 공유하는 nth-child 패턴 찾기
-    const nthChildPattern = selectors.filter(s => s.includes(':nth-child'));
-    if (nthChildPattern.length > 1) {
-      const optimized = optimizeNthChildSelectors(nthChildPattern);
-      const others = selectors.filter(s => !s.includes(':nth-child'));
-      return [...optimized, ...others];
-    }
-
-    // 같은 클래스 패턴 찾기
-    const classPattern = selectors.filter(s => s.startsWith('.') && !s.includes(' '));
-    if (classPattern.length > 1) {
-      const optimized = optimizeClassSelectors(classPattern);
-      const others = selectors.filter(s => !s.startsWith('.') || s.includes(' '));
-      return [...optimized, ...others];
-    }
-
-    return selectors;
-  };
-
-  const optimizeNthChildSelectors = (selectors: string[]): string[] => {
-    const groups: { [key: string]: number[] } = {};
-
-    selectors.forEach(selector => {
-      const match = selector.match(/^(.+):nth-child\((\d+)\)$/);
-      if (match) {
-        const base = match[1];
-        const index = parseInt(match[2]);
-        if (!groups[base]) groups[base] = [];
-        groups[base].push(index);
-      } else {
-        // 매칭되지 않으면 그대로 유지
-        return selector;
-      }
-    });
-
-    const result: string[] = [];
-    Object.entries(groups).forEach(([base, indices]) => {
-      if (indices.length === 1) {
-        result.push(`${base}:nth-child(${indices[0]})`);
-      } else {
-        // 연속된 인덱스인 경우 범위로 최적화
-        indices.sort((a, b) => a - b);
-        let start = indices[0];
-        let end = indices[0];
-
-        for (let i = 1; i < indices.length; i++) {
-          if (indices[i] === end + 1) {
-            end = indices[i];
-          } else {
-            if (start === end) {
-              result.push(`${base}:nth-child(${start})`);
-            } else {
-              result.push(`${base}:nth-child(n+${start}):nth-child(-n+${end})`);
-            }
-            start = end = indices[i];
-          }
-        }
-
-        if (start === end) {
-          result.push(`${base}:nth-child(${start})`);
-        } else {
-          result.push(`${base}:nth-child(n+${start}):nth-child(-n+${end})`);
-        }
-      }
-    });
-
-    return result;
-  };
-
-  const optimizeClassSelectors = (selectors: string[]): string[] => {
-    // 간단한 클래스 패턴 최적화 (예: .item-1, .item-2, .item-3)
-    const patterns = selectors.map(s => s.substring(1)); // . 제거
-    const commonPrefix = findCommonPrefix(patterns);
-
-    if (commonPrefix && commonPrefix.length > 2) {
-      const baseClass = commonPrefix;
-      const variations = patterns.map(p => p.substring(commonPrefix.length));
-
-      // 숫자 패턴인 경우
-      if (variations.every(v => /^\d+$/.test(v))) {
-        const numbers = variations.map(v => parseInt(v)).sort((a, b) => a - b);
-        return [`[class*="${baseClass}"]`]; // attribute selector 사용
-      }
-    }
-
-    return selectors;
-  };
-
-  const findCommonPrefix = (strings: string[]): string => {
-    if (strings.length === 0) return '';
-    if (strings.length === 1) return strings[0];
-
-    let prefix = strings[0];
-    for (let i = 1; i < strings.length; i++) {
-      while (strings[i].indexOf(prefix) !== 0) {
-        prefix = prefix.substring(0, prefix.length - 1);
-        if (prefix === '') return '';
-      }
-    }
-    return prefix;
-  };
 
   return (
     <div className="p-8">
@@ -455,16 +599,6 @@ export default function CrawlPage() {
         </button>
       </div>
       <div className="mb-4">
-        <button onClick={() => setCurrentMode('번호')} className={`p-2 rounded mr-2 ${currentMode === '번호' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}>번호 선택</button>
-        <button onClick={() => setCurrentMode('제목')} className={`p-2 rounded mr-2 ${currentMode === '제목' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>제목 선택</button>
-        <button onClick={() => setCurrentMode('날짜')} className={`p-2 rounded mr-2 ${currentMode === '날짜' ? 'bg-yellow-500 text-white' : 'bg-gray-200'}`}>날짜 선택</button>
-        <button onClick={() => setCurrentMode('조회수')} className={`p-2 rounded mr-2 ${currentMode === '조회수' ? 'bg-orange-500 text-white' : 'bg-gray-200'}`}>조회수 선택</button>
-        <button onClick={() => setCurrentMode('링크')} className={`p-2 rounded mr-2 ${currentMode === '링크' ? 'bg-purple-500 text-white' : 'bg-gray-200'}`}>링크 선택</button>
-      </div>
-      <button onClick={handleCrawl} className="bg-green-500 text-white p-2 rounded mb-4" disabled={Object.values(selectors).every(s => s.trim() === '')}>
-        크롤링 실행
-      </button>
-      <div className="mb-4">
         {Object.entries(selectors).map(([type, selector]) => (
           <div key={type} className="flex items-center mb-2">
             <span className="mr-2 w-16">{type}:</span>
@@ -475,6 +609,20 @@ export default function CrawlPage() {
               placeholder="CSS Selector 입력"
               className="border p-2 flex-1 mr-2"
             />
+            <button
+              onClick={() => setCurrentMode(type)}
+              className={`p-2 rounded whitespace-nowrap ${
+                currentMode === type
+                  ? type === '번호' ? 'bg-blue-500 text-white'
+                  : type === '제목' ? 'bg-green-500 text-white'
+                  : type === '날짜' ? 'bg-yellow-500 text-white'
+                  : type === '조회수' ? 'bg-orange-500 text-white'
+                  : 'bg-purple-500 text-white'
+                  : 'bg-gray-200'
+              }`}
+            >
+              {type} 선택
+            </button>
           </div>
         ))}
       </div>
@@ -495,8 +643,43 @@ export default function CrawlPage() {
                 const height = Math.max(body.scrollHeight, body.offsetHeight, html.clientHeight, html.scrollHeight, html.offsetHeight);
                 iframeRef.current.style.height = height + 'px';
 
-                // 스타일 업데이트
-                updateIframeStyles();
+                // 스타일 업데이트 (직접 실행)
+                const allElements = doc.querySelectorAll('*');
+                allElements.forEach(el => {
+                  const element = el as HTMLElement;
+                  element.style.border = '';
+                  element.removeAttribute('data-selected-types');
+                  element.removeAttribute('data-original-border');
+                  element.title = '';
+                });
+
+                // 각 셀렉터별로 선택된 타입들을 수집
+                const selectorTypeMap: { [selector: string]: string[] } = {};
+
+                Object.entries(selectors).forEach(([type, sel]) => {
+                  if (sel) {
+                    const selectorList = sel.split(',').map(s => s.trim()).filter(s => s);
+                    selectorList.forEach(selector => {
+                      if (!selectorTypeMap[selector]) {
+                        selectorTypeMap[selector] = [];
+                      }
+                      selectorTypeMap[selector].push(type);
+                    });
+                  }
+                });
+
+                // 각 셀렉터에 대해 테두리 적용
+                Object.entries(selectorTypeMap).forEach(([selector, types]) => {
+                  try {
+                    const elements = doc.querySelectorAll(selector);
+                    elements.forEach(el => {
+                      const element = el as HTMLElement;
+                      applyElementBorder(element, selector);
+                    });
+                  } catch (e) {
+                    // 유효하지 않은 셀렉터 무시
+                  }
+                });
               }
             }
           }}
