@@ -1,20 +1,167 @@
-# **AI Development Guidelines for Next.js in Firebase Studio**
+# **공지사항 크롤링 플랫폼 - AI 개발 가이드라인**
 
-These guidelines define the operational principles and capabilities of an AI agent (e.g., Gemini) interacting with Next.js projects within the Firebase Studio environment. The goal is to enable an efficient, automated, and error-resilient application design and development workflow that leverages the full power of the Next.js framework.
+이 가이드라인은 공지사항 크롤링 플랫폼의 AI 에이전트(Gemini)가 Next.js 프로젝트에서 효율적이고 자동화된 개발 워크플로우를 수행하기 위한 운영 원칙과 기능을 정의합니다.
 
-## **Environment & Context Awareness**
+## **프로젝트 개요**
 
-The AI operates within the Firebase Studio development environment, which provides a Code OSS-based IDE and a pre-configured environment for Next.js development.
+공지사항 크롤링 플랫폼은 사용자가 입력한 웹사이트의 공지사항을 자동으로 크롤링하고, 선택한 요소의 데이터를 추출하여 카카오톡 채널로 전송하는 웹 애플리케이션입니다.
 
-* **Project Structure (App Router):** The AI assumes a standard Next.js project structure using the App Router.
-  * `/app`: The core directory for file-based routing.
-  * `layout.tsx`: The root layout.
-  * `page.tsx`: The page UI for a route.
-  * `/components`: For reusable UI components.
-  * `/lib`: For utility functions and libraries.
-* **`dev.nix` Configuration:** The AI is aware of the `.idx/dev.nix` file for environment configuration, which includes `pkgs.nodejs` and other necessary tools.
-* **Preview Server:** Firebase Studio provides a running preview server. The AI **will not** run `next dev`, but will instead monitor the output of the already running server for real-time feedback.
-* **Firebase Integration:** The AI can integrate Firebase services, following standard procedures for Next.js projects, including using the Firebase Admin SDK in server-side code.
+### **주요 기능**
+- **웹사이트 크롤링**: Puppeteer를 활용한 헤드리스 브라우저로 JS 렌더링 지원
+- **요소 선택 인터페이스**: 직관적인 클릭으로 크롤링할 요소 선택
+- **카카오톡 연동**: 추출된 데이터를 실시간 전송
+- **Firebase 인증**: 사용자 로그인/회원가입 시스템
+- **데이터 관리**: Firestore를 활용한 크롤링 이력 저장
+
+## **프로젝트 구조**
+
+```
+src/
+├── app/
+│   ├── api/
+│   │   ├── crawl/          # 페이지 크롤링 API
+│   │   ├── extract/        # 데이터 추출 API
+│   │   ├── send-kakao/     # 카카오톡 전송 API
+│   │   └── auth/           # Firebase 인증 API (계획)
+│   ├── crawl/              # 크롤링 페이지
+│   ├── auth/               # 인증 페이지 (계획)
+│   ├── dashboard/          # 사용자 대시보드 (계획)
+│   ├── layout.tsx          # 루트 레이아웃
+│   └── page.tsx            # 메인 페이지
+├── components/
+│   ├── auth/               # 인증 컴포넌트 (계획)
+│   ├── crawl/              # 크롤링 관련 컴포넌트
+│   └── ui/                 # 공통 UI 컴포넌트
+├── lib/
+│   ├── firebase.ts         # Firebase 설정 (계획)
+│   ├── auth.ts             # 인증 유틸리티 (계획)
+│   └── utils.ts            # 공통 유틸리티
+└── types/
+    └── index.ts            # TypeScript 타입 정의
+```
+
+## **Firebase 통합 가이드라인**
+
+### **Firebase 설정**
+1. Firebase 프로젝트 생성 및 설정
+2. Authentication, Firestore 활성화
+3. 환경 변수 설정 (`.env.local`)
+
+### **인증 구현**
+- **Firebase Authentication** 사용
+- 이메일/비밀번호, Google 소셜 로그인 지원
+- Server Components에서 세션 관리
+- Client Components에서 인증 상태 관리
+
+### **데이터베이스 설계**
+```typescript
+// 사용자 정보
+interface User {
+  uid: string;
+  email: string;
+  displayName: string;
+  createdAt: Date;
+}
+
+// 크롤링 설정
+interface CrawlConfig {
+  id: string;
+  userId: string;
+  url: string;
+  selector: string;
+  name: string;
+  isActive: boolean;
+  createdAt: Date;
+}
+
+// 크롤링 이력
+interface CrawlHistory {
+  id: string;
+  configId: string;
+  userId: string;
+  content: string;
+  status: 'success' | 'error';
+  createdAt: Date;
+}
+```
+
+## **개발 워크플로우**
+
+### **Phase별 개발 계획**
+
+#### **Phase 1: 핵심 기능 (현재)**
+- [x] 기본 크롤링 기능 구현
+- [x] 요소 선택 인터페이스
+- [x] 카카오톡 API 연동
+
+#### **Phase 2: Firebase 인증 시스템**
+- [ ] Firebase 프로젝트 설정
+- [ ] 인증 컴포넌트 구현
+- [ ] 로그인/회원가입 페이지
+- [ ] 세션 관리
+
+#### **Phase 3: 데이터 관리**
+- [ ] Firestore 스키마 설계
+- [ ] 크롤링 설정 저장
+- [ ] 이력 관리
+- [ ] 사용자 대시보드
+
+#### **Phase 4: 고급 기능**
+- [ ] 정기 크롤링 스케줄링
+- [ ] 알림 시스템
+- [ ] 다중 플랫폼 연동
+
+## **코드 품질 및 보안**
+
+### **보안 고려사항**
+- **API 키 보호**: 서버 사이드에서만 Firebase Admin SDK 사용
+- **사용자 데이터**: Firestore 보안 규칙으로 데이터 접근 제어
+- **인증 토큰**: 안전한 토큰 관리 및 검증
+
+### **성능 최적화**
+- **Server Components**: 데이터 페칭을 서버에서 처리
+- **코드 스플리팅**: 동적 import로 번들 크기 최적화
+- **캐싱**: Next.js 캐시 전략 활용
+
+## **AI 개발 원칙**
+
+### **자동화된 에러 감지 및 수정**
+- 코드 수정 후 자동으로 `npm run lint` 실행
+- TypeScript 오류 자동 감지 및 수정
+- 런타임 오류 모니터링 및 보고
+
+### **사용자 중심 디자인**
+- 모던하고 직관적인 UI/UX
+- 모바일 반응형 디자인
+- 접근성(A11Y) 표준 준수
+
+### **반복적 개발 프로세스**
+1. 사용자 요구사항 분석
+2. blueprint.md 파일 업데이트
+3. 단계별 구현 계획 수립
+4. 코드 구현 및 테스트
+5. 피드백 기반 개선
+
+## **Firebase MCP 설정**
+
+Firebase 기능을 사용할 때는 다음 MCP 서버 설정을 추가하세요:
+
+```json
+{
+    "mcpServers": {
+        "firebase": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "firebase-tools@latest",
+                "experimental:mcp"
+            ]
+        }
+    }
+}
+```
+
+이 가이드라인을 따라 공지사항 크롤링 플랫폼을 체계적이고 효율적으로 개발할 수 있습니다.
 
 ## Firebase MCP
 
