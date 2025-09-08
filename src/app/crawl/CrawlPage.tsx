@@ -601,17 +601,9 @@ export default function CrawlPage() {
       <div className="mb-4">
         {Object.entries(selectors).map(([type, selector]) => (
           <div key={type} className="flex items-center mb-2">
-            <span className="mr-2 w-16">{type}:</span>
-            <input
-              type="text"
-              value={selector}
-              onChange={(e) => updateSelector(type, e.target.value)}
-              placeholder="CSS Selector 입력"
-              className="border p-2 flex-1 mr-2"
-            />
             <button
               onClick={() => setCurrentMode(type)}
-              className={`p-2 rounded whitespace-nowrap ${
+              className={`p-2 rounded mr-2 whitespace-nowrap ${
                 currentMode === type
                   ? type === '번호' ? 'bg-blue-500 text-white'
                   : type === '제목' ? 'bg-green-500 text-white'
@@ -621,8 +613,15 @@ export default function CrawlPage() {
                   : 'bg-gray-200'
               }`}
             >
-              {type} 선택
+              {type}
             </button>
+            <input
+              type="text"
+              value={selector}
+              onChange={(e) => updateSelector(type, e.target.value)}
+              placeholder="CSS Selector 입력"
+              className="border p-2 flex-1"
+            />
           </div>
         ))}
       </div>
