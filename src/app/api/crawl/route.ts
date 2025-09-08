@@ -1,0 +1,24 @@
+import puppeteer from 'puppeteer';
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const url = searchParams.get('url');
+
+  if (!url) {
+    return NextResponse.json({ error: 'URL이 필요합니다.' }, { status: 400 });
+  }
+
+  try {
+    const browser = await puppeteer.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: 'networkidle2' });
+    const html = await page.content();
+    await browser.close();
+
+    return NextResponse.json({ html });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: '크롤링 실패' }, { status: 500 });
+  }
+}
