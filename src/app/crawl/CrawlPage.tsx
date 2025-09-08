@@ -67,17 +67,34 @@ export default function CrawlPage() {
         // 선택 해제
         const newSelectors = currentSelectors.filter(s => s !== selector);
         target.style.border = '';
+        target.removeAttribute('data-original-border');
         return {
           ...prev,
           [currentMode]: newSelectors.join(', ')
         };
       } else {
         // 선택 추가
-        target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
-        return {
-          ...prev,
-          [currentMode]: combineSelectors(prev[currentMode], selector)
-        };
+        const selectedType = getElementSelectedType(selector);
+        if (selectedType) {
+          // 이미 다른 타입으로 선택된 경우, 해당 타입에서 제거하고 현재 타입으로 추가
+          const updatedSelectors = { ...prev };
+          for (const [type, sel] of Object.entries(updatedSelectors)) {
+            if (sel.split(',').map(s => s.trim()).includes(selector)) {
+              const typeSelectors = sel.split(',').map(s => s.trim()).filter(s => s !== selector);
+              updatedSelectors[type] = typeSelectors.join(', ');
+            }
+          }
+          updatedSelectors[currentMode] = combineSelectors(updatedSelectors[currentMode], selector);
+          target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
+          return updatedSelectors;
+        } else {
+          // 새로 선택
+          target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
+          return {
+            ...prev,
+            [currentMode]: combineSelectors(prev[currentMode], selector)
+          };
+        }
       }
     });
   }, [currentMode]);
@@ -88,6 +105,9 @@ export default function CrawlPage() {
 
     // 현재 선택 모드가 있고, 아직 선택되지 않은 요소만 호버링
     if (currentMode && !isElementSelected(selector)) {
+      // 호버링 전 원래 테두리 색상 저장
+      const originalBorder = target.style.border;
+      target.setAttribute('data-original-border', originalBorder);
       target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
     }
   }, [currentMode, selectors]);
@@ -99,8 +119,29 @@ export default function CrawlPage() {
     // 선택되지 않은 요소만 테두리 제거
     if (!isElementSelected(selector)) {
       target.style.border = '';
+    } else {
+      // 선택된 요소는 원래 테두리 색상으로 복원
+      const originalBorder = target.getAttribute('data-original-border') || '';
+      if (originalBorder) {
+        target.style.border = originalBorder;
+      } else {
+        // 원래 테두리가 없으면 선택된 타입의 색상으로 설정
+        const selectedType = getElementSelectedType(selector);
+        if (selectedType) {
+          target.style.border = `2px solid ${colorMap[selectedType] || 'red'}`;
+        }
+      }
     }
   }, [selectors]);
+
+  const getElementSelectedType = (selector: string): string | null => {
+    for (const [type, sel] of Object.entries(selectors)) {
+      if (sel.split(',').map(s => s.trim()).includes(selector)) {
+        return type;
+      }
+    }
+    return null;
+  };
 
   const isElementSelected = (selector: string): boolean => {
     return Object.values(selectors).some(sel =>
@@ -133,6 +174,11 @@ export default function CrawlPage() {
       }
     }
   }, [selectors, html]);
+
+  // 선택 모드 변경 시 iframe 스타일 업데이트
+  useEffect(() => {
+    updateIframeStyles();
+  }, [currentMode]);
 
   const handleCrawl = async () => {
     const activeSelectors = Object.values(selectors).filter(s => s.trim() !== '');
@@ -220,6 +266,34 @@ export default function CrawlPage() {
 
   const updateSelector = (type: string, selector: string) => {
     setSelectors(prev => ({ ...prev, [type]: selector }));
+    // CSS 변경 시 iframe 내 요소들 스타일 업데이트
+    setTimeout(() => updateIframeStyles(), 0);
+  };
+
+  const updateIframeStyles = () => {
+    if (iframeRef.current && html) {
+      const doc = iframeRef.current.contentDocument;
+      if (doc) {
+        // 모든 요소 border 초기화
+        const allElements = doc.querySelectorAll('*');
+        allElements.forEach(el => (el as HTMLElement).style.border = '');
+
+        // 각 타입별로 테두리 적용
+        Object.entries(selectors).forEach(([type, sel]) => {
+          if (sel) {
+            const selectorList = sel.split(',').map(s => s.trim()).filter(s => s);
+            selectorList.forEach(selector => {
+              try {
+                const elements = doc.querySelectorAll(selector);
+                elements.forEach(el => (el as HTMLElement).style.border = `2px solid ${colorMap[type] || 'red'}`);
+              } catch (e) {
+                // 유효하지 않은 셀렉터 무시
+              }
+            });
+          }
+        });
+      }
+    }
   };
 
   const combineSelectors = (existing: string, newSelector: string): string => {
@@ -412,6 +486,9 @@ export default function CrawlPage() {
                 doc.addEventListener('click', handleIframeClick);
                 doc.addEventListener('mouseover', handleIframeMouseOver);
                 doc.addEventListener('mouseout', handleIframeMouseOut);
+
+                // 스타일 업데이트
+                updateIframeStyles();
               }
             }
           }}
