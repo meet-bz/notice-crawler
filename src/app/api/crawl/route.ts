@@ -99,7 +99,18 @@ export async function GET(request: NextRequest) {
 
     const inlinedHtml = juice($.html());
 
-    return NextResponse.json({ html: inlinedHtml });
+    // JavaScript 필요 메시지 제거
+    const $final = cheerio.load(inlinedHtml);
+    $final('*').each((i, el) => {
+      const text = $final(el).text();
+      if (text.includes("doesn't work properly without JavaScript") || 
+          text.includes("JavaScript enabled") ||
+          text.includes("enable it to continue")) {
+        $final(el).remove();
+      }
+    });
+
+    return NextResponse.json({ html: $final.html() });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: '크롤링 실패' }, { status: 500 });
