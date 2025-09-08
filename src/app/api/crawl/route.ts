@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import puppeteer from 'puppeteer';
 import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
 import juice from 'juice';
@@ -12,9 +12,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const browser = await chromium.launch();
+    const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'networkidle' });
+    await page.goto(url, { waitUntil: 'networkidle2' });
     const html = await page.content();
     await browser.close();
 

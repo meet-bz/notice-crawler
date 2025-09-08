@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import puppeteer from 'puppeteer';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
@@ -9,9 +9,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const browser = await chromium.launch();
+    const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'networkidle' });
+    await page.goto(url, { waitUntil: 'networkidle2' });
 
     let content;
     if (Array.isArray(selector)) {
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       const contents = [];
       for (const sel of selector) {
         try {
-          const text = await page.locator(sel).textContent();
+          const text = await page.$eval(sel, el => el.textContent);
           contents.push({ selector: sel, content: text });
         } catch (e) {
           contents.push({ selector: sel, content: null });
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       content = contents;
     } else {
       // 단일 셀렉터
-      content = await page.locator(selector).textContent();
+      content = await page.$eval(selector, el => el.textContent);
     }
 
     await browser.close();
