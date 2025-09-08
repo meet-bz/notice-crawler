@@ -97,7 +97,7 @@ export default function CrawlPage() {
         }
       }
     });
-  }, [currentMode]);
+  }, [currentMode, selectors, colorMap]);
 
   const handleIframeMouseOver = useCallback((e: Event) => {
     const target = e.target as HTMLElement;
@@ -110,7 +110,7 @@ export default function CrawlPage() {
       target.setAttribute('data-original-border', originalBorder);
       target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
     }
-  }, [currentMode, selectors]);
+  }, [currentMode, selectors, colorMap]);
 
   const handleIframeMouseOut = useCallback((e: Event) => {
     const target = e.target as HTMLElement;
@@ -132,7 +132,7 @@ export default function CrawlPage() {
         }
       }
     }
-  }, [selectors]);
+  }, [selectors, colorMap]);
 
   const getElementSelectedType = (selector: string): string | null => {
     for (const [type, sel] of Object.entries(selectors)) {
@@ -175,10 +175,23 @@ export default function CrawlPage() {
     }
   }, [selectors, html]);
 
-  // 선택 모드 변경 시 iframe 스타일 업데이트
+  // 선택 모드 변경 시 iframe 이벤트 리스너 업데이트
   useEffect(() => {
-    updateIframeStyles();
-  }, [currentMode]);
+    if (iframeRef.current && html) {
+      const doc = iframeRef.current.contentDocument;
+      if (doc) {
+        // 기존 이벤트 리스너 제거
+        doc.removeEventListener('click', handleIframeClick);
+        doc.removeEventListener('mouseover', handleIframeMouseOver);
+        doc.removeEventListener('mouseout', handleIframeMouseOut);
+
+        // 최신 콜백 함수로 이벤트 리스너 다시 추가
+        doc.addEventListener('click', handleIframeClick);
+        doc.addEventListener('mouseover', handleIframeMouseOver);
+        doc.addEventListener('mouseout', handleIframeMouseOut);
+      }
+    }
+  }, [currentMode, handleIframeClick, handleIframeMouseOver, handleIframeMouseOut]);
 
   const handleCrawl = async () => {
     const activeSelectors = Object.values(selectors).filter(s => s.trim() !== '');
@@ -476,13 +489,18 @@ export default function CrawlPage() {
             if (iframeRef.current) {
               const doc = iframeRef.current.contentDocument;
               if (doc) {
+                // 기존 이벤트 리스너 제거
+                doc.removeEventListener('click', handleIframeClick);
+                doc.removeEventListener('mouseover', handleIframeMouseOver);
+                doc.removeEventListener('mouseout', handleIframeMouseOut);
+
                 // 높이 자동 조정
                 const body = doc.body;
                 const html = doc.documentElement;
                 const height = Math.max(body.scrollHeight, body.offsetHeight, html.clientHeight, html.scrollHeight, html.offsetHeight);
                 iframeRef.current.style.height = height + 'px';
 
-                // 요소 선택 기능 추가
+                // 요소 선택 기능 추가 (최신 콜백 함수 사용)
                 doc.addEventListener('click', handleIframeClick);
                 doc.addEventListener('mouseover', handleIframeMouseOver);
                 doc.addEventListener('mouseout', handleIframeMouseOut);
