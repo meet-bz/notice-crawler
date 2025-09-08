@@ -6,7 +6,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 export default function CrawlPage() {
   const searchParams = useSearchParams();
   const url = searchParams.get('url');
-  const [html, setHtml] = useState('');
+  const [html, setHtml] = useState('<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 400px; font-size: 18px; color: #666;"><h2 style="margin-bottom: 20px;">공지사항 크롤러</h2><p>웹사이트 URL을 입력하고 분석을 시작하세요</p></div>');
   const [selectors, setSelectors] = useState<{ [key: string]: string }>({
     번호: '',
     제목: '',
@@ -31,10 +31,11 @@ export default function CrawlPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
-    if (inputUrl && !isAnalyzing) {
-      handleAnalyze(inputUrl);
+    // URL 파라미터가 있으면 초기 URL로 설정
+    if (url) {
+      setInputUrl(url);
     }
-  }, [allowScripts]);
+  }, [url]);
 
   const handleAnalyze = async (analyzeUrl: string) => {
     if (!analyzeUrl) return;
@@ -202,13 +203,13 @@ export default function CrawlPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-4">크롤링 페이지</h1>
+      <h1 className="text-2xl font-bold mb-4">공지사항 크롤러</h1>
       <div className="mb-4">
         <input
           type="url"
           value={inputUrl}
           onChange={(e) => setInputUrl(e.target.value)}
-          placeholder="분석할 URL을 입력하세요"
+          placeholder="웹사이트 URL을 입력하세요"
           className="border p-2 w-full mb-2"
         />
         <button
@@ -216,7 +217,7 @@ export default function CrawlPage() {
           disabled={isAnalyzing}
           className="bg-blue-500 text-white p-2 rounded mr-2"
         >
-          {isAnalyzing ? '분석 중...' : '분석 시작'}
+          {isAnalyzing ? '분석 중...' : '크롤링 시작'}
         </button>
         <button
           onClick={() => setAllowScripts(!allowScripts)}
