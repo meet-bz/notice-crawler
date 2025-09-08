@@ -55,7 +55,7 @@ export default function CrawlPage() {
   };
 
   const handleCrawl = async () => {
-    const activeSelectors = Object.values(selectors).filter(s => s.trim() !== '');
+    const activeSelectors = Object.entries(selectors).filter(([type, sel]) => sel.trim() !== '');
     if (activeSelectors.length === 0) {
       alert('요소를 선택하세요.');
       return;
@@ -66,7 +66,7 @@ export default function CrawlPage() {
       const res = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: inputUrl, selectors: activeSelectors }),
+        body: JSON.stringify({ url: inputUrl, selectors: Object.fromEntries(activeSelectors) }),
       });
       const data = await res.json();
       if (data.content) {

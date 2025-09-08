@@ -5,9 +5,9 @@ import { NextRequest, NextResponse } from 'next/server';
 puppeteer.use(StealthPlugin());
 
 export async function POST(request: NextRequest) {
-  const { url, selector } = await request.json();
+  const { url, selectors } = await request.json();
 
-  if (!url || !selector) {
+  if (!url || !selectors) {
     return NextResponse.json({ error: 'URL과 셀렉터가 필요합니다.' }, { status: 400 });
   }
 
@@ -65,22 +65,21 @@ export async function POST(request: NextRequest) {
     // 추가 지연
     await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 500));
 
-    let content;
-    if (Array.isArray(selector)) {
-      // 여러 셀렉터 처리
-      const contents = [];
-      for (const sel of selector) {
-        try {
-          const text = await page.$eval(sel, el => el.textContent);
-          contents.push({ selector: sel, content: text });
-        } catch (e) {
-          contents.push({ selector: sel, content: null });
+    const content: { [key: string]: string } = {};
+    for (const [type, sel] of Object.entries(selectors as { [key: string]: string })) {
+      if (sel) {
+        const selectorList = sel.split(',').map((s: string) => s.trim()).filter((s: string) => s);
+        const texts: string[] = [];
+        for (const selector of selectorList) {
+          try {
+            const text = await page.$eval(selector, el => el.textContent?.trim() || '');
+            if (text) texts.push(text);
+          } catch (e) {
+            // 무시
+          }
         }
+        content[type] = texts.join('\n');
       }
-      content = contents;
-    } else {
-      // 단일 셀렉터
-      content = await page.$eval(selector, el => el.textContent);
     }
 
     await browser.close();

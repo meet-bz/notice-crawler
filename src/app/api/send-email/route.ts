@@ -17,7 +17,9 @@ export async function POST(request: NextRequest) {
   });
 
   let message;
-  if (Array.isArray(content)) {
+  if (typeof content === 'object' && !Array.isArray(content)) {
+    message = Object.entries(content).map(([type, text]) => `${type}: ${text}`).join('\n\n');
+  } else if (Array.isArray(content)) {
     message = content.map(item => `${item.selector}: ${item.content}`).join('\n');
   } else {
     message = content;

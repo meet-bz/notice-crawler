@@ -251,24 +251,42 @@ export default function IframeViewer({
       const doc = iframeRef.current.contentDocument;
       if (doc) {
         const allElements = doc.querySelectorAll('*');
-        allElements.forEach(el => (el as HTMLElement).style.border = '');
+        allElements.forEach(el => {
+          const element = el as HTMLElement;
+          element.style.border = '';
+          element.removeAttribute('data-original-border');
+          element.removeAttribute('data-selected-types');
+          element.title = '';
+        });
+
+        const selectorTypeMap: { [selector: string]: string[] } = {};
 
         Object.entries(selectors).forEach(([type, sel]) => {
           if (sel) {
             const selectorList = sel.split(',').map(s => s.trim()).filter(s => s);
             selectorList.forEach(selector => {
-              try {
-                const elements = doc.querySelectorAll(selector);
-                elements.forEach(el => (el as HTMLElement).style.border = `2px solid ${colorMap[type] || 'red'}`);
-              } catch (e) {
-                // 유효하지 않은 셀렉터 무시
+              if (!selectorTypeMap[selector]) {
+                selectorTypeMap[selector] = [];
               }
+              selectorTypeMap[selector].push(type);
             });
+          }
+        });
+
+        Object.entries(selectorTypeMap).forEach(([selector, types]) => {
+          try {
+            const elements = doc.querySelectorAll(selector);
+            elements.forEach(el => {
+              const element = el as HTMLElement;
+              applyElementBorder(element, selector);
+            });
+          } catch (e) {
+            // 유효하지 않은 셀렉터 무시
           }
         });
       }
     }
-  }, [selectors, html, colorMap]);
+  }, [selectors, html, colorMap, currentMode, applyElementBorder]);
 
   useEffect(() => {
     if (iframeRef.current && html) {
@@ -327,7 +345,7 @@ export default function IframeViewer({
         });
       }
     }
-  }, [html, handleIframeClick, handleIframeMouseOver, handleIframeMouseOut, selectors, applyElementBorder]);
+  }, [html, handleIframeClick, handleIframeMouseOver, handleIframeMouseOut, selectors, applyElementBorder, currentMode]);
 
   return (
     <div className="border p-4 mb-4" style={{ minHeight: '400px' }}>
