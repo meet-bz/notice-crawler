@@ -27,6 +27,7 @@ export default function CrawlPage() {
   const [isCrawling, setIsCrawling] = useState(false);
   const [inputUrl, setInputUrl] = useState('');
   const [allowScripts, setAllowScripts] = useState(false);
+  const [isCrawlingForModal, setIsCrawlingForModal] = useState(false);
   const [extractedData, setExtractedData] = useState<{ [key: string]: string }>({});
 
   useEffect(() => {
@@ -81,6 +82,38 @@ export default function CrawlPage() {
     }
   };
 
+  const handleCrawlForModal = async () => {
+    const activeSelectors = Object.entries(selectors).filter(([type, sel]) => sel.trim() !== '');
+    if (activeSelectors.length === 0) {
+      alert('요소를 선택하세요.');
+      return;
+    }
+
+    setIsCrawlingForModal(true);
+    try {
+      const res = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: inputUrl, selectors: Object.fromEntries(activeSelectors) }),
+      });
+      const data = await res.json();
+      if (data.content) {
+        setExtractedData(data.content);
+      } else {
+        alert('크롤링 실패: ' + (data.error || '알 수 없는 오류'));
+      }
+    } catch (err) {
+      alert('크롤링 중 오류 발생: ' + (err as Error).message);
+    } finally {
+      setIsCrawlingForModal(false);
+    }
+  };
+
+  const handleShowResults = () => {
+    setShowResultsModal(true);
+    handleCrawlForModal();
+  };
+
   const handleSend = async (recipient: string) => {
     if (!extractedData || Object.keys(extractedData).length === 0) {
       alert('먼저 크롤링을 수행해주세요.');
@@ -117,7 +150,7 @@ export default function CrawlPage() {
         isAnalyzing={isAnalyzing}
         allowScripts={allowScripts}
         onToggleScripts={() => setAllowScripts(!allowScripts)}
-        onShowResults={() => setShowResultsModal(true)}
+        onShowResults={handleShowResults}
         onShowNotification={() => setShowModal(true)}
         hasSelectors={hasSelectors}
       />
@@ -143,7 +176,7 @@ export default function CrawlPage() {
         isOpen={showResultsModal}
         onClose={() => setShowResultsModal(false)}
         data={extractedData}
-        isLoading={isCrawling}
+        isLoading={isCrawlingForModal}
         onCrawl={handleCrawl}
       />
 

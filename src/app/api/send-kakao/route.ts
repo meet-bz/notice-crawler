@@ -10,14 +10,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    let message;
-    if (Array.isArray(content)) {
-      message = content.map(item => `${item.selector}: ${item.content}`).join('\n');
-    } else {
-      message = content;
-    }
-
-    await axios.post('https://kapi.kakao.com/v2/api/talk/memo/default/send', {
+  let message;
+  if (typeof content === 'object' && !Array.isArray(content)) {
+    message = Object.entries(content).map(([type, text]) => `${type}: ${text}`).join('\n\n');
+  } else if (Array.isArray(content)) {
+    message = content.map(item => `${item.selector}: ${item.content}`).join('\n');
+  } else {
+    message = content;
+  }    await axios.post('https://kapi.kakao.com/v2/api/talk/memo/default/send', {
       template_object: {
         object_type: 'text',
         text: `공지사항: ${message}`,

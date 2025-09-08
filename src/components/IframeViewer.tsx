@@ -43,20 +43,30 @@ export default function IframeViewer({
     );
   }, [selectors]);
 
-  const applyElementBorder = useCallback((element: HTMLElement, selector: string) => {
-    const selectedTypes = getElementSelectedTypes(selector);
-    if (selectedTypes.length === 0) {
+  const applyElementBorder = useCallback((element: HTMLElement, selector: string, overrideTypes?: string[]) => {
+    const selectedTypes = overrideTypes ?? getElementSelectedTypes(selector);
+    if (!selectedTypes || selectedTypes.length === 0) {
       element.style.border = '';
+      element.style.boxShadow = '';
       element.removeAttribute('data-original-border');
       element.removeAttribute('data-selected-types');
+      element.title = '';
       return;
     }
 
     const maxBorders = 3;
     const displayTypes = selectedTypes.slice(0, maxBorders);
-    const borders = displayTypes.map(type => `2px solid ${colorMap[type] || 'gray'}`);
 
-    element.style.border = borders.join(' ');
+    // 겹치는 테두리를 시각적으로 구분하기 위해 각 타입에 다른 border-width 사용
+    const borders: string[] = [];
+    displayTypes.forEach((type, idx) => {
+      const color = colorMap[type] || 'gray';
+      const width = 2 + idx * 2; // 첫 번째: 2px, 두 번째: 4px, 세 번째: 6px
+      borders.push(`${width}px solid ${color}`);
+    });
+
+    // CSS에서 마지막 border가 적용되므로, 역순으로 추가하여 첫 번째 타입이 가장 바깥에 오게 함
+    element.style.border = borders.reverse().join(' ');
     element.setAttribute('data-selected-types', selectedTypes.join(','));
     element.title = `선택된 타입: ${selectedTypes.join(', ')}`;
   }, [getElementSelectedTypes, colorMap]);
@@ -198,7 +208,10 @@ export default function IframeViewer({
             applyElementBorder(target, selector);
           } else {
             target.style.border = '';
+            target.style.boxShadow = '';
             target.removeAttribute('data-original-border');
+            target.removeAttribute('data-selected-types');
+            target.title = '';
           }
         }
       } else {
@@ -216,16 +229,16 @@ export default function IframeViewer({
     const selector = getSelector(target);
 
     if (currentMode && !isElementSelected(selector)) {
-      const currentBorder = target.style.border;
+      const currentBorder = target.style.border || '';
       if (!target.hasAttribute('data-original-border')) {
         target.setAttribute('data-original-border', currentBorder);
       }
-      target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
-
+      // hover 상태는 현재 모드 색상으로 시각화 (override)
+      applyElementBorder(target, selector, [currentMode]);
       setHoveredElement(target);
       setHoveredSelector(selector);
     }
-  }, [currentMode, isElementSelected, colorMap]);
+  }, [currentMode, isElementSelected, applyElementBorder]);
 
   const handleIframeMouseOut = useCallback((e: Event) => {
     const target = e.target as HTMLElement;
@@ -234,9 +247,10 @@ export default function IframeViewer({
     if (!isElementSelected(selector)) {
       target.style.border = '';
     } else {
-      const originalBorder = target.getAttribute('data-original-border') || '';
-      if (originalBorder) {
-        target.style.border = originalBorder;
+      const original = target.getAttribute('data-original-border') || '';
+      if (original) {
+        target.style.border = original;
+        target.removeAttribute('data-original-border');
       } else {
         applyElementBorder(target, selector);
       }
@@ -278,7 +292,7 @@ export default function IframeViewer({
             const elements = doc.querySelectorAll(selector);
             elements.forEach(el => {
               const element = el as HTMLElement;
-              applyElementBorder(element, selector);
+              applyElementBorder(element, selector, types);
             });
           } catch (e) {
             // 유효하지 않은 셀렉터 무시
@@ -302,9 +316,14 @@ export default function IframeViewer({
           }
         });
 
-        doc.removeEventListener('click', handleIframeClick);
-        doc.removeEventListener('mouseover', handleIframeMouseOver);
-        doc.removeEventListener('mouseout', handleIframeMouseOut);
+        // 안전하게 리스너를 갱신하기 위해 먼저 제거
+        try {
+          doc.removeEventListener('click', handleIframeClick);
+          doc.removeEventListener('mouseover', handleIframeMouseOver);
+          doc.removeEventListener('mouseout', handleIframeMouseOut);
+        } catch (e) {
+          // ignore
+        }
 
         doc.addEventListener('click', handleIframeClick);
         doc.addEventListener('mouseover', handleIframeMouseOver);
@@ -337,12 +356,31 @@ export default function IframeViewer({
             const elements = doc.querySelectorAll(selector);
             elements.forEach(el => {
               const element = el as HTMLElement;
-              applyElementBorder(element, selector);
+              applyElementBorder(element, selector, types);
             });
           } catch (e) {
             // 유효하지 않은 셀렉터 무시
           }
         });
+
+        // cleanup on unmount or html change
+        return () => {
+          try {
+            doc.removeEventListener('click', handleIframeClick);
+            doc.removeEventListener('mouseover', handleIframeMouseOver);
+            doc.removeEventListener('mouseout', handleIframeMouseOut);
+          } catch (e) {
+            // ignore
+          }
+          const els = doc.querySelectorAll('*');
+          els.forEach(el => {
+            const element = el as HTMLElement;
+            element.style.border = '';
+            element.removeAttribute('data-selected-types');
+            element.removeAttribute('data-original-border');
+            element.title = '';
+          });
+        };
       }
     }
   }, [html, handleIframeClick, handleIframeMouseOver, handleIframeMouseOut, selectors, applyElementBorder, currentMode]);
