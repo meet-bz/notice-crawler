@@ -19,6 +19,7 @@ export default function CrawlPage() {
   const [recipient, setRecipient] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [inputUrl, setInputUrl] = useState('');
+  const [allowScripts, setAllowScripts] = useState(false);
   const [extractedData, setExtractedData] = useState<{ [key: string]: string }>({});
   const colorMap: { [key: string]: string } = {
     번호: 'blue',
@@ -30,14 +31,10 @@ export default function CrawlPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
-    if (url) {
-      setInputUrl(url);
-      handleAnalyze(url);
-    } else {
-      // URL이 없으면 기본 메시지 표시
-      setHtml('<div style="display: flex; justify-content: center; align-items: center; height: 200px; font-size: 18px;">URL을 입력하여 분석을 시작하세요</div>');
+    if (inputUrl && !isAnalyzing) {
+      handleAnalyze(inputUrl);
     }
-  }, [url]);
+  }, [allowScripts]);
 
   const handleAnalyze = async (analyzeUrl: string) => {
     if (!analyzeUrl) return;
@@ -69,10 +66,7 @@ export default function CrawlPage() {
           if (sel) {
             try {
               const elements = doc.querySelectorAll(sel);
-              elements.forEach(el => {
-                (el as HTMLElement).style.border = `2px solid ${colorMap[type] || 'red'}`;
-                (el as HTMLElement).style.boxShadow = `0 0 5px ${colorMap[type] || 'red'}`;
-              });
+              elements.forEach(el => (el as HTMLElement).style.border = `2px solid ${colorMap[type] || 'red'}`);
             } catch (e) {
               // 유효하지 않은 셀렉터 무시
             }
@@ -179,10 +173,58 @@ export default function CrawlPage() {
     return selectors.join(', ');
   };
 
+  const handleIframeClick = useCallback((e: Event) => {
+    e.preventDefault();
+    if (!currentMode) return;
+    const target = e.target as HTMLElement;
+    const selector = getSelector(target);
+    setSelectors(prev => ({
+      ...prev,
+      [currentMode]: combineSelectors(prev[currentMode], selector)
+    }));
+  }, [currentMode, selectors]);
+
+  const handleIframeMouseOver = useCallback((e: Event) => {
+    const target = e.target as HTMLElement;
+    const selector = getSelector(target);
+    if (currentMode && !selectors[currentMode].includes(selector)) {
+      target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
+    }
+  }, [currentMode, selectors]);
+
+  const handleIframeMouseOut = useCallback((e: Event) => {
+    const target = e.target as HTMLElement;
+    const selector = getSelector(target);
+    if (currentMode && !selectors[currentMode].includes(selector)) {
+      target.style.border = '';
+    }
+  }, [currentMode, selectors]);
+
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-4">크롤링 페이지</h1>
-      {url && <p className="mb-4">분석 중인 URL: {url}</p>}
+      <div className="mb-4">
+        <input
+          type="url"
+          value={inputUrl}
+          onChange={(e) => setInputUrl(e.target.value)}
+          placeholder="분석할 URL을 입력하세요"
+          className="border p-2 w-full mb-2"
+        />
+        <button
+          onClick={() => handleAnalyze(inputUrl)}
+          disabled={isAnalyzing}
+          className="bg-blue-500 text-white p-2 rounded mr-2"
+        >
+          {isAnalyzing ? '분석 중...' : '분석 시작'}
+        </button>
+        <button
+          onClick={() => setAllowScripts(!allowScripts)}
+          className={`p-2 rounded ${allowScripts ? 'bg-green-500 text-white' : 'bg-gray-200'}`}
+        >
+          JavaScript {allowScripts ? '활성화' : '비활성화'}
+        </button>
+      </div>
       <div className="mb-4">
         <p className="mb-2">선택 모드:</p>
         <button onClick={() => setCurrentMode('번호')} className={`p-2 rounded mr-2 ${currentMode === '번호' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}>번호 선택</button>
@@ -215,7 +257,7 @@ export default function CrawlPage() {
           srcDoc={html}
           className="w-full"
           style={{ height: 'auto', minHeight: '400px' }}
-          sandbox="allow-same-origin allow-scripts"
+          sandbox={allowScripts ? "allow-same-origin allow-scripts" : "allow-same-origin"}
           onLoad={() => {
             if (iframeRef.current) {
               const doc = iframeRef.current.contentDocument;
@@ -227,38 +269,9 @@ export default function CrawlPage() {
                 iframeRef.current.style.height = height + 'px';
 
                 // 요소 선택 기능 추가
-                const handleClick = (e: Event) => {
-                  e.preventDefault();
-                  if (!currentMode) return;
-                  const target = e.target as HTMLElement;
-                  const selector = getSelector(target);
-                  setSelectors(prev => ({
-                    ...prev,
-                    [currentMode]: combineSelectors(prev[currentMode], selector)
-                  }));
-                };
-
-                const handleMouseOver = (e: Event) => {
-                  const target = e.target as HTMLElement;
-                  const selector = getSelector(target);
-                  if (currentMode && !selectors[currentMode].includes(selector)) {
-                    target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
-                    target.style.boxShadow = `0 0 5px ${colorMap[currentMode] || 'gray'}`;
-                  }
-                };
-
-                const handleMouseOut = (e: Event) => {
-                  const target = e.target as HTMLElement;
-                  const selector = getSelector(target);
-                  if (currentMode && !selectors[currentMode].includes(selector)) {
-                    target.style.border = '';
-                    target.style.boxShadow = '';
-                  }
-                };
-
-                doc.addEventListener('click', handleClick);
-                doc.addEventListener('mouseover', handleMouseOver);
-                doc.addEventListener('mouseout', handleMouseOut);
+                doc.addEventListener('click', handleIframeClick);
+                doc.addEventListener('mouseover', handleIframeMouseOver);
+                doc.addEventListener('mouseout', handleIframeMouseOut);
               }
             }
           }}
