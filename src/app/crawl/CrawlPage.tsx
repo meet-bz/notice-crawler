@@ -613,7 +613,7 @@ export default function CrawlPage() {
                   : 'bg-gray-200'
               }`}
             >
-              {type}
+              {type} 선택
             </button>
             <input
               type="text"
