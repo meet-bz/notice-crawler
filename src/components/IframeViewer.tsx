@@ -57,16 +57,17 @@ export default function IframeViewer({
     const maxBorders = 3;
     const displayTypes = selectedTypes.slice(0, maxBorders);
 
-    // 겹치는 테두리를 시각적으로 구분하기 위해 각 타입에 다른 border-width 사용
-    const borders: string[] = [];
+    // 겹친 테두리를 만들기 위해 inset box-shadow 사용
+    const shadows: string[] = [];
     displayTypes.forEach((type, idx) => {
       const color = colorMap[type] || 'gray';
       const width = 2 + idx * 2; // 첫 번째: 2px, 두 번째: 4px, 세 번째: 6px
-      borders.push(`${width}px solid ${color}`);
+      shadows.push(`inset 0 0 0 ${width}px ${color}`);
     });
 
-    // CSS에서 마지막 border가 적용되므로, 역순으로 추가하여 첫 번째 타입이 가장 바깥에 오게 함
-    element.style.border = borders.reverse().join(' ');
+    // 기본 테두리를 투명으로 두고 boxShadow로 겹친 테두리 시각화
+    element.style.border = '6px solid transparent'; // 최대 두께만큼 padding
+    element.style.boxShadow = shadows.join(', ');
     element.setAttribute('data-selected-types', selectedTypes.join(','));
     element.title = `선택된 타입: ${selectedTypes.join(', ')}`;
   }, [getElementSelectedTypes, colorMap]);
@@ -230,8 +231,9 @@ export default function IframeViewer({
 
     if (currentMode && !isElementSelected(selector)) {
       const currentBorder = target.style.border || '';
+      const currentBox = target.style.boxShadow || '';
       if (!target.hasAttribute('data-original-border')) {
-        target.setAttribute('data-original-border', currentBorder);
+        target.setAttribute('data-original-border', currentBorder + '||' + currentBox);
       }
       // hover 상태는 현재 모드 색상으로 시각화 (override)
       applyElementBorder(target, selector, [currentMode]);
@@ -246,10 +248,13 @@ export default function IframeViewer({
 
     if (!isElementSelected(selector)) {
       target.style.border = '';
+      target.style.boxShadow = '';
     } else {
       const original = target.getAttribute('data-original-border') || '';
       if (original) {
-        target.style.border = original;
+        const [origBorder, origBox] = original.split('||');
+        target.style.border = origBorder || '';
+        target.style.boxShadow = origBox || '';
         target.removeAttribute('data-original-border');
       } else {
         applyElementBorder(target, selector);
@@ -268,6 +273,7 @@ export default function IframeViewer({
         allElements.forEach(el => {
           const element = el as HTMLElement;
           element.style.border = '';
+          element.style.boxShadow = '';
           element.removeAttribute('data-original-border');
           element.removeAttribute('data-selected-types');
           element.title = '';
@@ -311,7 +317,9 @@ export default function IframeViewer({
           const element = el as HTMLElement;
           const originalBorder = element.getAttribute('data-original-border');
           if (originalBorder !== null) {
-            element.style.border = originalBorder;
+            const [origBorder, origBox] = originalBorder.split('||');
+            element.style.border = origBorder || '';
+            element.style.boxShadow = origBox || '';
             element.removeAttribute('data-original-border');
           }
         });
@@ -332,6 +340,7 @@ export default function IframeViewer({
         allElements.forEach(el => {
           const element = el as HTMLElement;
           element.style.border = '';
+          element.style.boxShadow = '';
           element.removeAttribute('data-selected-types');
           element.removeAttribute('data-original-border');
           element.title = '';
@@ -376,6 +385,7 @@ export default function IframeViewer({
           els.forEach(el => {
             const element = el as HTMLElement;
             element.style.border = '';
+            element.style.boxShadow = '';
             element.removeAttribute('data-selected-types');
             element.removeAttribute('data-original-border');
             element.title = '';
@@ -406,6 +416,7 @@ export default function IframeViewer({
               allElements.forEach(el => {
                 const element = el as HTMLElement;
                 element.style.border = '';
+                element.style.boxShadow = '';
                 element.removeAttribute('data-selected-types');
                 element.removeAttribute('data-original-border');
                 element.title = '';
