@@ -1,15 +1,14 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function CrawlPage() {
   const searchParams = useSearchParams();
   const url = searchParams.get('url');
-  const [html, setHtml] = useState('');
-  const [selectedSelector, setSelectedSelector] = useState('');
+  const [elements, setElements] = useState<{ text: string; selector: string; type: string }[]>([]);
+  const [selectedSelectors, setSelectedSelectors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const htmlContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (url) {
@@ -17,7 +16,13 @@ export default function CrawlPage() {
         .then(res => res.json())
         .then(data => {
           if (data.html) {
-            setHtml(data.html);
+            // 파싱해서 요소 추출
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(data.html, 'text/html');
+            const titles = Array.from(doc.querySelectorAll('h1, h2, h3')).map(el => ({ text: el.textContent?.trim(), selector: getSelector(el as HTMLElement), type: 'title' }));
+            const buttons = Array.from(doc.querySelectorAll('button, input[type="submit"]')).map(el => ({ text: (el as HTMLInputElement).value || el.textContent?.trim(), selector: getSelector(el as HTMLElement), type: 'button' }));
+            const links = Array.from(doc.querySelectorAll('a')).map(el => ({ text: el.textContent?.trim(), selector: getSelector(el as HTMLElement), type: 'link' }));
+            setElements([...titles, ...buttons, ...links]);
           } else {
             alert('크롤링 실패: ' + data.error);
           }
@@ -26,31 +31,6 @@ export default function CrawlPage() {
         .finally(() => setLoading(false));
     }
   }, [url]);
-
-  useEffect(() => {
-    if (html && htmlContainerRef.current) {
-      // 요소 선택 기능 추가 - 크롤링된 HTML 컨테이너에만 적용
-      const handleClick = (e: Event) => {
-        e.preventDefault();
-        const target = e.target as HTMLElement;
-        
-        // 크롤링된 HTML 컨테이너 내부의 요소인지 확인
-        if (htmlContainerRef.current && htmlContainerRef.current.contains(target)) {
-          const selector = getSelector(target);
-          setSelectedSelector(selector);
-          alert(`선택된 요소: ${selector}`);
-        }
-      };
-
-      // 컨테이너에 이벤트 리스너 추가
-      const container = htmlContainerRef.current;
-      container.addEventListener('click', handleClick);
-      
-      return () => {
-        container.removeEventListener('click', handleClick);
-      };
-    }
-  }, [html]);
 
   const getSelector = (element: HTMLElement): string => {
     // ID가 있으면 가장 우선
@@ -70,7 +50,7 @@ export default function CrawlPage() {
     const path: string[] = [];
     let current: HTMLElement | null = element;
     
-    while (current && current !== htmlContainerRef.current) {
+    while (current && current.parentElement) {
       let selector = current.tagName.toLowerCase();
       
       // 형제 요소들 중에서 몇 번째인지 확인
@@ -95,7 +75,7 @@ export default function CrawlPage() {
   };
 
   const handleCrawl = async () => {
-    if (!selectedSelector) {
+    if (selectedSelectors.length === 0) {
       alert('요소를 선택하세요.');
       return;
     }
@@ -103,7 +83,7 @@ export default function CrawlPage() {
     const res = await fetch('/api/extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, selector: selectedSelector }),
+      body: JSON.stringify({ url, selector: selectedSelectors }),
     });
     const data = await res.json();
     if (data.content) {
@@ -129,16 +109,32 @@ export default function CrawlPage() {
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-4">크롤링 페이지</h1>
       <p>URL: {url}</p>
-      <p>선택된 셀렉터: {selectedSelector}</p>
-      <button onClick={handleCrawl} className="bg-green-500 text-white p-2 rounded mb-4">
+      <p>선택된 항목 수: {selectedSelectors.length}</p>
+      <button onClick={handleCrawl} className="bg-green-500 text-white p-2 rounded mb-4" disabled={selectedSelectors.length === 0}>
         크롤링 실행
       </button>
-      <div
-        ref={htmlContainerRef}
-        dangerouslySetInnerHTML={{ __html: html }}
-        className="border p-4 max-h-96 overflow-auto cursor-pointer"
-        style={{ cursor: 'pointer' }}
-      />
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold mb-2">추출할 요소 선택:</h2>
+        {elements.map((el, index) => (
+          <div key={index} className="flex items-center mb-1">
+            <input
+              type="checkbox"
+              id={`el-${index}`}
+              checked={selectedSelectors.includes(el.selector)}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setSelectedSelectors([...selectedSelectors, el.selector]);
+                } else {
+                  setSelectedSelectors(selectedSelectors.filter(s => s !== el.selector));
+                }
+              }}
+            />
+            <label htmlFor={`el-${index}`} className="ml-2">
+              [{el.type}] {el.text || '텍스트 없음'} - {el.selector}
+            </label>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
