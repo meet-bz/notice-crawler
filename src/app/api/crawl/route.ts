@@ -71,8 +71,32 @@ export async function GET(request: NextRequest) {
     const html = await page.content();
     await browser.close();
 
-    // CSS 인라인화
+    // CSS 인라인화 및 링크 수정
     const $ = cheerio.load(html);
+    const baseUrl = new URL(url).origin;
+
+    // 상대 경로를 절대 경로로 변환
+    $('link[rel="stylesheet"]').each((i, el) => {
+      const href = $(el).attr('href');
+      if (href && !href.startsWith('http')) {
+        $(el).attr('href', new URL(href, baseUrl).href);
+      }
+    });
+
+    $('img').each((i, el) => {
+      const src = $(el).attr('src');
+      if (src && !src.startsWith('http')) {
+        $(el).attr('src', new URL(src, baseUrl).href);
+      }
+    });
+
+    $('script').each((i, el) => {
+      const src = $(el).attr('src');
+      if (src && !src.startsWith('http')) {
+        $(el).attr('src', new URL(src, baseUrl).href);
+      }
+    });
+
     const inlinedHtml = juice($.html());
 
     return NextResponse.json({ html: inlinedHtml });
