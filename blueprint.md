@@ -34,7 +34,18 @@
 - **실시간 전송**: 추출된 데이터 즉시 전송
 - **에러 처리**: 전송 실패 시 적절한 피드백
 
-#### 4. UI/UX
+#### 4. 컴포넌트 기반 아키텍처
+- **모듈화 리팩토링**: 단일 컴포넌트를 5개의 독립 컴포넌트로 분리
+- **재사용성 향상**: 각 컴포넌트 독립적 작동으로 다른 프로젝트 활용 가능
+- **유지보수성 개선**: 기능별 분리로 코드 수정 용이
+- **컴포넌트 구조**:
+  - `UrlInput`: URL 입력 및 분석 제어
+  - `SelectorInput`: 선택자 관리 및 모드 선택
+  - `IframeViewer`: 웹페이지 표시 및 상호작용
+  - `ExtractedData`: 추출 데이터 표시
+  - `EmailModal`: 이메일 전송 인터페이스
+
+#### 5. UI/UX
 - **모던 디자인**: Tailwind CSS 활용
 - **반응형 레이아웃**: 모바일 친화적
 - **직관적 네비게이션**: 심플한 사용자 흐름
@@ -45,6 +56,45 @@
 - **크롤링**: Puppeteer
 - **스타일링**: Tailwind CSS
 - **외부 API**: Kakao API
+- **아키텍처**: 컴포넌트 기반 모듈화 설계
+- **상태 관리**: React Hooks (useState, useEffect, useCallback)
+- **컴포넌트 설계**: 단일 책임 원칙 기반 모듈 컴포넌트
+
+## 📁 프로젝트 구조
+
+```
+src/
+├── app/
+│   ├── api/
+│   │   ├── crawl/          # 페이지 크롤링 API
+│   │   ├── extract/        # 데이터 추출 API
+│   │   ├── send-kakao/     # 카카오톡 전송 API
+│   │   └── auth/           # Firebase 인증 API (계획)
+│   ├── crawl/              # 크롤링 페이지
+│   │   └── CrawlPage.tsx   # 메인 크롤링 컴포넌트
+│   ├── auth/               # 인증 페이지 (계획)
+│   ├── dashboard/          # 사용자 대시보드 (계획)
+│   ├── layout.tsx          # 루트 레이아웃
+│   ├── page.tsx            # 메인 페이지
+│   └── globals.css         # 전역 스타일
+├── components/             # 재사용 컴포넌트
+│   ├── UrlInput.tsx        # URL 입력 및 분석 컴포넌트
+│   ├── SelectorInput.tsx   # 선택자 입력 및 모드 선택 컴포넌트
+│   ├── IframeViewer.tsx    # iframe 뷰어 및 상호작용 컴포넌트
+│   ├── ExtractedData.tsx   # 추출된 데이터 표시 컴포넌트
+│   ├── EmailModal.tsx      # 이메일 전송 모달 컴포넌트
+│   ├── auth/               # 인증 컴포넌트 (계획)
+│   ├── crawl/              # 크롤링 관련 컴포넌트
+│   └── ui/                 # 공통 UI 컴포넌트
+├── lib/
+│   ├── firebase.ts         # Firebase 설정 (계획)
+│   ├── auth.ts             # 인증 유틸리티 (계획)
+│   ├── firebase-template.ts # Firebase 템플릿 설정
+│   └── utils.ts            # 공통 유틸리티
+└── types/
+    ├── index.ts            # TypeScript 타입 정의
+    └── firebase.ts         # Firebase 타입 정의
+```
 
 ## 향후 개발 계획
 

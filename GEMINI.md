@@ -1,6 +1,14 @@
 # **공지사항 크롤링 플랫폼 - AI 개발 가이드라인**
 
-이 가이드라인은 공지사항 크롤링 플랫폼의 AI 에이전트(Gemini)가 Next.js 프로젝트에서 효율적이고 자동화된 개발 워크플로우를 수행하기 위한 운영 원칙과 기능을 정의합니다.
+이 가이드라인은 공지사항 크롤링 플랫폼의 AI 에이전트(Gemini)가 Next.js 프로젝트에서 효율적이고 자동화된 개발 워크#### **Phase 1: 핵심 기능 (현재)**
+- [x] 기본 크롤링 기능 구현
+- [x] 요소 선택 인터페이스
+- [x] 다중 모드 선택 (번호/제목/날짜/조회수/링크)
+- [x] 실시간 모드 전환 및 색상 표시
+- [x] 다중 선택 및 중첩 테두리 표시
+- [x] 세부요소 선택 강화 (더블클릭/Ctrl+클릭)
+- [x] 카카오톡 연동
+- [x] 컴포넌트 기반 모듈화 리팩토링기 위한 운영 원칙과 기능을 정의합니다.
 
 ## **프로젝트 개요**
 
@@ -14,6 +22,7 @@
 - **다중 선택 지원**: 같은 요소를 여러 타입으로 선택 가능
 - **세부요소 선택 강화**: 더블클릭/Ctrl+클릭으로 더 정밀한 셀렉터 생성
 - **카카오톡 연동**: 추출된 데이터를 실시간 전송
+- **컴포넌트 기반 아키텍처**: 모듈화된 컴포넌트 설계로 유지보수성 향상
 - **Firebase 인증**: 사용자 로그인/회원가입 시스템 (계획 중)
 - **데이터 관리**: Firestore를 활용한 크롤링 이력 저장 (계획 중)
 
@@ -28,21 +37,67 @@ src/
 │   │   ├── send-kakao/     # 카카오톡 전송 API
 │   │   └── auth/           # Firebase 인증 API (계획)
 │   ├── crawl/              # 크롤링 페이지
+│   │   └── CrawlPage.tsx   # 메인 크롤링 컴포넌트
 │   ├── auth/               # 인증 페이지 (계획)
 │   ├── dashboard/          # 사용자 대시보드 (계획)
 │   ├── layout.tsx          # 루트 레이아웃
-│   └── page.tsx            # 메인 페이지
-├── components/
+│   ├── page.tsx            # 메인 페이지
+│   └── globals.css         # 전역 스타일
+├── components/             # 재사용 컴포넌트
+│   ├── UrlInput.tsx        # URL 입력 및 분석 컴포넌트
+│   ├── SelectorInput.tsx   # 선택자 입력 및 모드 선택 컴포넌트
+│   ├── IframeViewer.tsx    # iframe 뷰어 및 상호작용 컴포넌트
+│   ├── ExtractedData.tsx   # 추출된 데이터 표시 컴포넌트
+│   ├── EmailModal.tsx      # 이메일 전송 모달 컴포넌트
 │   ├── auth/               # 인증 컴포넌트 (계획)
 │   ├── crawl/              # 크롤링 관련 컴포넌트
 │   └── ui/                 # 공통 UI 컴포넌트
 ├── lib/
 │   ├── firebase.ts         # Firebase 설정 (계획)
 │   ├── auth.ts             # 인증 유틸리티 (계획)
+│   ├── firebase-template.ts # Firebase 템플릿 설정
 │   └── utils.ts            # 공통 유틸리티
 └── types/
-    └── index.ts            # TypeScript 타입 정의
+    ├── index.ts            # TypeScript 타입 정의
+    └── firebase.ts         # Firebase 타입 정의
 ```
+
+## **컴포넌트 아키텍처 설계**
+
+프로젝트는 컴포넌트 기반 모듈화 아키텍처를 채택하여 다음과 같은 장점을 제공합니다:
+
+### **컴포넌트 구조 및 역할**
+
+#### **UrlInput 컴포넌트**
+- **역할**: URL 입력 및 크롤링 제어
+- **기능**: URL 입력 필드, 분석 버튼, JavaScript 토글
+- **Props**: `url`, `onUrlChange`, `onAnalyze`, `isAnalyzing`, `allowScripts`, `onToggleScripts`
+
+#### **SelectorInput 컴포넌트**
+- **역할**: 선택자 관리 및 모드 선택
+- **기능**: 모드별 버튼, CSS 선택자 입력 필드, 실시간 모드 전환
+- **Props**: `selectors`, `currentMode`, `onModeChange`, `onSelectorChange`
+
+#### **IframeViewer 컴포넌트**
+- **역할**: 웹페이지 표시 및 요소 상호작용
+- **기능**: iframe 렌더링, 요소 호버링/클릭 이벤트, 선택자 생성, 테두리 표시
+- **Props**: `html`, `selectors`, `currentMode`, `allowScripts`, `onSelectorsChange`
+
+#### **ExtractedData 컴포넌트**
+- **역할**: 추출된 데이터 표시
+- **기능**: 추출 결과 표시, 데이터 포맷팅
+- **Props**: `data`
+
+#### **EmailModal 컴포넌트**
+- **역할**: 이메일 전송 인터페이스
+- **기능**: 이메일 주소 입력, 전송 확인
+- **Props**: `isOpen`, `onClose`, `onSend`
+
+### **컴포넌트 설계 원칙**
+- **단일 책임 원칙**: 각 컴포넌트는 하나의 명확한 역할을 담당
+- **Props 기반 통신**: 부모-자식 컴포넌트 간 Props를 통한 데이터 흐름
+- **재사용성**: 독립적인 컴포넌트 설계로 다른 프로젝트에서도 활용 가능
+- **TypeScript**: 모든 Props와 상태에 대한 타입 정의
 
 ## **Firebase 통합 가이드라인**
 
