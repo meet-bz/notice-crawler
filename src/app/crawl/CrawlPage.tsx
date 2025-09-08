@@ -9,6 +9,8 @@ export default function CrawlPage() {
   const [html, setHtml] = useState('');
   const [selectedSelectors, setSelectedSelectors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [recipient, setRecipient] = useState('');
   const htmlContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,15 +47,35 @@ export default function CrawlPage() {
         }
       };
 
+      const handleMouseOver = (e: Event) => {
+        const target = e.target as HTMLElement;
+        const selector = getSelector(target);
+        if (!selectedSelectors.includes(selector)) {
+          target.style.border = '2px solid gray';
+        }
+      };
+
+      const handleMouseOut = (e: Event) => {
+        const target = e.target as HTMLElement;
+        const selector = getSelector(target);
+        if (!selectedSelectors.includes(selector)) {
+          target.style.border = '';
+        }
+      };
+
       // 컨테이너에 이벤트 리스너 추가
       const container = htmlContainerRef.current;
       container.addEventListener('click', handleClick);
+      container.addEventListener('mouseover', handleMouseOver);
+      container.addEventListener('mouseout', handleMouseOut);
       
       return () => {
         container.removeEventListener('click', handleClick);
+        container.removeEventListener('mouseover', handleMouseOver);
+        container.removeEventListener('mouseout', handleMouseOut);
       };
     }
-  }, [html]);
+  }, [html, selectedSelectors]);
 
   useEffect(() => {
     if (htmlContainerRef.current) {
@@ -120,6 +142,14 @@ export default function CrawlPage() {
       alert('요소를 선택하세요.');
       return;
     }
+    setShowModal(true);
+  };
+
+  const handleSend = async () => {
+    if (!recipient) {
+      alert('이메일 주소를 입력하세요.');
+      return;
+    }
     // 크롤링 API 호출
     const res = await fetch('/api/extract', {
       method: 'POST',
@@ -128,14 +158,16 @@ export default function CrawlPage() {
     });
     const data = await res.json();
     if (data.content) {
-      // 카카오톡 전송
-      const sendRes = await fetch('/api/send-kakao', {
+      // 이메일 전송
+      const sendRes = await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: data.content, url }),
+        body: JSON.stringify({ content: data.content, url, email: recipient }),
       });
       if (sendRes.ok) {
         alert('크롤링 완료 및 전송됨');
+        setShowModal(false);
+        setRecipient('');
       } else {
         alert('전송 실패');
       }
@@ -160,6 +192,28 @@ export default function CrawlPage() {
         className="border p-4 max-h-96 overflow-auto"
         style={{ cursor: 'pointer' }}
       />
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded">
+            <h2 className="text-lg font-bold mb-4">알림 전송</h2>
+            <input
+              type="email"
+              placeholder="이메일 주소"
+              value={recipient}
+              onChange={(e) => setRecipient(e.target.value)}
+              className="border p-2 w-full mb-4"
+            />
+            <div className="flex justify-end">
+              <button onClick={() => setShowModal(false)} className="mr-2 bg-gray-500 text-white p-2 rounded">
+                취소
+              </button>
+              <button onClick={handleSend} className="bg-blue-500 text-white p-2 rounded">
+                전송
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
