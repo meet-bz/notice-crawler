@@ -206,12 +206,13 @@ export default function CrawlPage() {
   const handleIframeClick = useCallback((e: Event) => {
     e.preventDefault();
     if (!currentMode) return;
+
     const target = e.target as HTMLElement;
     const selector = getSelector(target);
     const selectedTypes = getElementSelectedTypes(selector);
 
     setSelectors(prev => {
-      const currentSelectors = prev[currentMode].split(',').map(s => s.trim()).filter(s => s);
+      const newSelectors = { ...prev };
 
       if (selectedTypes.includes(currentMode)) {
         // 현재 모드로 이미 선택된 경우 - 선택 해제 또는 세부요소 선택 강화
@@ -219,41 +220,36 @@ export default function CrawlPage() {
         if (mouseEvent.detail === 2 || mouseEvent.ctrlKey) { // 더블클릭 또는 Ctrl+클릭으로 세부요소 선택 강화
           const refinedSelector = getRefinedSelector(target);
           if (refinedSelector !== selector) {
-            const newSelectors = currentSelectors.map(s => s === selector ? refinedSelector : s);
-            // 중복 제거
-            const uniqueSelectors = [...new Set(newSelectors)];
+            const currentSelectors = newSelectors[currentMode].split(',').map(s => s.trim()).filter(s => s);
+            const newSelectorList = currentSelectors.map(s => s === selector ? refinedSelector : s);
+            const uniqueSelectors = [...new Set(newSelectorList)];
+            newSelectors[currentMode] = uniqueSelectors.join(', ');
             applyElementBorder(target, refinedSelector);
-            return {
-              ...prev,
-              [currentMode]: uniqueSelectors.join(', ')
-            };
+          }
+        } else {
+          // 일반 클릭 - 현재 모드에서 선택 해제
+          const currentSelectors = newSelectors[currentMode].split(',').map(s => s.trim()).filter(s => s);
+          const newSelectorList = currentSelectors.filter(s => s !== selector);
+          newSelectors[currentMode] = newSelectorList.join(', ');
+
+          const remainingTypes = selectedTypes.filter(type => type !== currentMode);
+          if (remainingTypes.length > 0) {
+            // 다른 타입으로 여전히 선택되어 있음
+            applyElementBorder(target, selector);
+          } else {
+            // 완전히 선택 해제
+            target.style.border = '';
+            target.removeAttribute('data-original-border');
           }
         }
-
-        // 일반 클릭 - 현재 모드에서 선택 해제
-        const newSelectors = currentSelectors.filter(s => s !== selector);
-        const remainingTypes = selectedTypes.filter(type => type !== currentMode);
-        if (remainingTypes.length > 0) {
-          // 다른 타입으로 여전히 선택되어 있음
-          applyElementBorder(target, selector);
-        } else {
-          // 완전히 선택 해제
-          target.style.border = '';
-          target.removeAttribute('data-original-border');
-        }
-        return {
-          ...prev,
-          [currentMode]: newSelectors.join(', ')
-        };
       } else {
         // 현재 모드로 선택되지 않은 경우 - 추가 (중복 방지)
-        const newSelectorString = combineSelectors(prev[currentMode], selector);
+        const newSelectorString = combineSelectors(newSelectors[currentMode], selector);
+        newSelectors[currentMode] = newSelectorString;
         applyElementBorder(target, selector);
-        return {
-          ...prev,
-          [currentMode]: newSelectorString
-        };
       }
+
+      return newSelectors;
     });
   }, [currentMode, getElementSelectedTypes, applyElementBorder, combineSelectors]);
 
@@ -523,7 +519,7 @@ export default function CrawlPage() {
   };
 
   const updateIframeStyles = useCallback(() => {
-    if (iframeRef.current && html) {
+    if (iframeRef.current) {
       const doc = iframeRef.current.contentDocument;
       if (doc) {
         // 모든 요소의 테두리와 데이터 속성 초기화
@@ -540,7 +536,7 @@ export default function CrawlPage() {
         const selectorTypeMap: { [selector: string]: string[] } = {};
 
         Object.entries(selectors).forEach(([type, sel]) => {
-          if (sel) {
+          if (sel && sel.trim()) {
             const selectorList = sel.split(',').map(s => s.trim()).filter(s => s);
             selectorList.forEach(selector => {
               if (!selectorTypeMap[selector]) {
@@ -561,17 +557,69 @@ export default function CrawlPage() {
             });
           } catch (e) {
             // 유효하지 않은 셀렉터 무시
+            console.warn('Invalid selector:', selector);
           }
         });
       }
     }
-  }, [html, selectors, applyElementBorder]);
+  }, [selectors, applyElementBorder]);
+
+  // selectors가 변경될 때마다 iframe 스타일 업데이트
+  useEffect(() => {
+    if (iframeRef.current) {
+      const doc = iframeRef.current.contentDocument;
+      if (doc) {
+        // 모든 요소의 테두리와 데이터 속성 초기화
+        const allElements = doc.querySelectorAll('*');
+        allElements.forEach(el => {
+          const element = el as HTMLElement;
+          element.style.border = '';
+          element.removeAttribute('data-selected-types');
+          element.removeAttribute('data-original-border');
+          element.title = '';
+        });
+
+        // 각 타입별로 테두리 적용
+        Object.entries(selectors).forEach(([type, sel]) => {
+          if (sel && sel.trim()) {
+            const selectorList = sel.split(',').map(s => s.trim()).filter(s => s);
+            selectorList.forEach(selector => {
+              try {
+                const elements = doc.querySelectorAll(selector);
+                elements.forEach(el => {
+                  const element = el as HTMLElement;
+                  // 현재 선택된 타입들 확인
+                  const selectedTypes = [];
+                  for (const [t, s] of Object.entries(selectors)) {
+                    if (s.split(',').map(s => s.trim()).includes(selector)) {
+                      selectedTypes.push(t);
+                    }
+                  }
+
+                  if (selectedTypes.length > 0) {
+                    // 다중 선택 시 테두리 중첩 (최대 3개까지)
+                    const maxBorders = 3;
+                    const displayTypes = selectedTypes.slice(0, maxBorders);
+                    const borders = displayTypes.map(t => `2px solid ${colorMap[t] || 'gray'}`);
+                    element.style.border = borders.join(' ');
+                    element.setAttribute('data-selected-types', selectedTypes.join(','));
+                    element.title = `선택된 타입: ${selectedTypes.join(', ')}`;
+                  }
+                });
+              } catch (e) {
+                // 유효하지 않은 셀렉터 무시
+                console.warn('Invalid selector:', selector);
+              }
+            });
+          }
+        });
+      }
+    }
+  }, [selectors, colorMap]);
 
   const updateSelector = useCallback((type: string, selector: string) => {
     setSelectors(prev => ({ ...prev, [type]: selector }));
-    // CSS 변경 시 iframe 내 요소들 스타일 업데이트
-    setTimeout(() => updateIframeStyles(), 0);
-  }, [updateIframeStyles]);
+  }, []);
 
   return (
     <div className="p-8">
