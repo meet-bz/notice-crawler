@@ -60,17 +60,22 @@ export default function CrawlPage() {
     if (iframeRef.current) {
       const doc = iframeRef.current.contentDocument;
       if (doc) {
+        // 모든 요소 border 초기화
         const allElements = doc.querySelectorAll('*');
         allElements.forEach(el => (el as HTMLElement).style.border = '');
 
+        // 각 타입별로 테두리 적용
         Object.entries(selectors).forEach(([type, sel]) => {
           if (sel) {
-            try {
-              const elements = doc.querySelectorAll(sel);
-              elements.forEach(el => (el as HTMLElement).style.border = `2px solid ${colorMap[type] || 'red'}`);
-            } catch (e) {
-              // 유효하지 않은 셀렉터 무시
-            }
+            const selectorList = sel.split(',').map(s => s.trim()).filter(s => s);
+            selectorList.forEach(selector => {
+              try {
+                const elements = doc.querySelectorAll(selector);
+                elements.forEach(el => (el as HTMLElement).style.border = `2px solid ${colorMap[type] || 'red'}`);
+              } catch (e) {
+                // 유효하지 않은 셀렉터 무시
+              }
+            });
           }
         });
       }
@@ -179,25 +184,44 @@ export default function CrawlPage() {
     if (!currentMode) return;
     const target = e.target as HTMLElement;
     const selector = getSelector(target);
-    setSelectors(prev => ({
-      ...prev,
-      [currentMode]: combineSelectors(prev[currentMode], selector)
-    }));
-  }, [currentMode, selectors]);
+    setSelectors(prev => {
+      const currentSelectors = prev[currentMode].split(',').map(s => s.trim()).filter(s => s);
+      if (currentSelectors.includes(selector)) {
+        // 선택 해제
+        const newSelectors = currentSelectors.filter(s => s !== selector);
+        return {
+          ...prev,
+          [currentMode]: newSelectors.join(', ')
+        };
+      } else {
+        // 선택 추가
+        return {
+          ...prev,
+          [currentMode]: combineSelectors(prev[currentMode], selector)
+        };
+      }
+    });
+  }, [currentMode]);
 
   const handleIframeMouseOver = useCallback((e: Event) => {
     const target = e.target as HTMLElement;
     const selector = getSelector(target);
-    if (currentMode && !selectors[currentMode].includes(selector)) {
-      target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
+    if (currentMode) {
+      const currentSelectors = selectors[currentMode].split(',').map(s => s.trim()).filter(s => s);
+      if (!currentSelectors.includes(selector)) {
+        target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
+      }
     }
   }, [currentMode, selectors]);
 
   const handleIframeMouseOut = useCallback((e: Event) => {
     const target = e.target as HTMLElement;
     const selector = getSelector(target);
-    if (currentMode && !selectors[currentMode].includes(selector)) {
-      target.style.border = '';
+    if (currentMode) {
+      const currentSelectors = selectors[currentMode].split(',').map(s => s.trim()).filter(s => s);
+      if (!currentSelectors.includes(selector)) {
+        target.style.border = '';
+      }
     }
   }, [currentMode, selectors]);
 
