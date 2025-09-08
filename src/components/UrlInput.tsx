@@ -5,6 +5,9 @@ interface UrlInputProps {
   isAnalyzing: boolean;
   allowScripts: boolean;
   onToggleScripts: () => void;
+  onShowResults: () => void;
+  onShowNotification: () => void;
+  hasSelectors: boolean;
 }
 
 export default function UrlInput({
@@ -13,7 +16,10 @@ export default function UrlInput({
   onAnalyze,
   isAnalyzing,
   allowScripts,
-  onToggleScripts
+  onToggleScripts,
+  onShowResults,
+  onShowNotification,
+  hasSelectors
 }: UrlInputProps) {
   const handleAnalyze = () => {
     onAnalyze(url);
@@ -41,6 +47,20 @@ export default function UrlInput({
           className={`p-2 rounded ${allowScripts ? 'bg-green-500 text-white' : 'bg-gray-200'}`}
         >
           JavaScript {allowScripts ? '활성화' : '비활성화'}
+        </button>
+        <button
+          onClick={onShowResults}
+          disabled={!hasSelectors}
+          className="bg-orange-500 text-white p-2 rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
+        >
+          분석 결과 보기
+        </button>
+        <button
+          onClick={onShowNotification}
+          disabled={!hasSelectors}
+          className="bg-purple-500 text-white p-2 rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
+        >
+          알림 설정
         </button>
       </div>
     </div>

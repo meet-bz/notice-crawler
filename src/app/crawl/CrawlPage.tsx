@@ -7,6 +7,7 @@ import SelectorInput from '../../components/SelectorInput';
 import IframeViewer from '../../components/IframeViewer';
 import ExtractedData from '../../components/ExtractedData';
 import EmailModal from '../../components/EmailModal';
+import ResultsModal from '../../components/ResultsModal';
 
 export default function CrawlPage() {
   const searchParams = useSearchParams();
@@ -21,7 +22,9 @@ export default function CrawlPage() {
   });
   const [currentMode, setCurrentMode] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [showResultsModal, setShowResultsModal] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isCrawling, setIsCrawling] = useState(false);
   const [inputUrl, setInputUrl] = useState('');
   const [allowScripts, setAllowScripts] = useState(false);
   const [extractedData, setExtractedData] = useState<{ [key: string]: string }>({});
@@ -58,18 +61,23 @@ export default function CrawlPage() {
       return;
     }
 
-    // 실제 크롤링 수행
-    const res = await fetch('/api/extract', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: inputUrl, selectors: activeSelectors }),
-    });
-    const data = await res.json();
-    if (data.content) {
-      setExtractedData(data.content);
-      alert('크롤링이 완료되었습니다.');
-    } else {
-      alert('크롤링 실패: ' + (data.error || '알 수 없는 오류'));
+    setIsCrawling(true);
+    try {
+      const res = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: inputUrl, selectors: activeSelectors }),
+      });
+      const data = await res.json();
+      if (data.content) {
+        setExtractedData(data.content);
+      } else {
+        alert('크롤링 실패: ' + (data.error || '알 수 없는 오류'));
+      }
+    } catch (err) {
+      alert('크롤링 중 오류 발생: ' + (err as Error).message);
+    } finally {
+      setIsCrawling(false);
     }
   };
 
@@ -79,7 +87,6 @@ export default function CrawlPage() {
       return;
     }
 
-    // 이메일 전송
     const sendRes = await fetch('/api/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -97,6 +104,8 @@ export default function CrawlPage() {
     setSelectors(prev => ({ ...prev, [type]: selector }));
   }, []);
 
+  const hasSelectors = Object.values(selectors).some(s => s.trim() !== '');
+
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-4">공지사항 크롤러</h1>
@@ -108,6 +117,9 @@ export default function CrawlPage() {
         isAnalyzing={isAnalyzing}
         allowScripts={allowScripts}
         onToggleScripts={() => setAllowScripts(!allowScripts)}
+        onShowResults={() => setShowResultsModal(true)}
+        onShowNotification={() => setShowModal(true)}
+        hasSelectors={hasSelectors}
       />
 
       <SelectorInput
@@ -125,22 +137,15 @@ export default function CrawlPage() {
         onSelectorsChange={setSelectors}
       />
 
-      <div className="mb-4 flex gap-2">
-        <button
-          onClick={handleCrawl}
-          className="bg-green-500 text-white p-2 rounded flex-1"
-        >
-          실제 크롤링 시작
-        </button>
-        <button
-          onClick={() => setShowModal(true)}
-          className="bg-purple-500 text-white p-2 rounded flex-1"
-        >
-          알림 설정
-        </button>
-      </div>
-
       <ExtractedData data={extractedData} />
+
+      <ResultsModal
+        isOpen={showResultsModal}
+        onClose={() => setShowResultsModal(false)}
+        data={extractedData}
+        isLoading={isCrawling}
+        onCrawl={handleCrawl}
+      />
 
       <EmailModal
         isOpen={showModal}
