@@ -57,17 +57,17 @@ export default function IframeViewer({
     const maxBorders = 3;
     const displayTypes = selectedTypes.slice(0, maxBorders);
 
-    // 겹친 테두리를 만들기 위해 inset box-shadow 사용
-    const shadows: string[] = [];
+    // 겹친 테두리를 시각적으로 구분하기 위해 각 타입에 다른 border-width 사용
+    const borders: string[] = [];
     displayTypes.forEach((type, idx) => {
       const color = colorMap[type] || 'gray';
       const width = 2 + idx * 2; // 첫 번째: 2px, 두 번째: 4px, 세 번째: 6px
-      shadows.push(`inset 0 0 0 ${width}px ${color}`);
+      borders.push(`${width}px solid ${color}`);
     });
 
-    // 기본 테두리를 투명으로 두고 boxShadow로 겹친 테두리 시각화
-    element.style.border = '6px solid transparent'; // 최대 두께만큼 padding
-    element.style.boxShadow = shadows.join(', ');
+    // CSS에서 마지막 border가 적용되므로, 역순으로 추가하여 첫 번째 타입이 가장 바깥에 오게 함
+    element.style.border = borders.reverse().join(' ');
+    element.style.boxShadow = `0 0 0 1px rgba(0,0,0,0.1)`; // 약간의 그림자 추가
     element.setAttribute('data-selected-types', selectedTypes.join(','));
     element.title = `선택된 타입: ${selectedTypes.join(', ')}`;
   }, [getElementSelectedTypes, colorMap]);
@@ -83,6 +83,8 @@ export default function IframeViewer({
   };
 
   const getSelector = (element: HTMLElement): string => {
+    if (!element || !element.tagName) return '';
+
     if (element.id) {
       return `#${element.id}`;
     }
@@ -98,6 +100,7 @@ export default function IframeViewer({
     let current: HTMLElement | null = element;
 
     while (current && current.parentElement) {
+      if (!current.tagName) break;
       let selector = current.tagName.toLowerCase();
 
       if (current.parentElement) {
@@ -116,10 +119,12 @@ export default function IframeViewer({
       if (path.length > 5) break;
     }
 
-    return path.join(' > ') || element.tagName.toLowerCase();
+    return path.join(' > ') || (element.tagName ? element.tagName.toLowerCase() : '');
   };
 
   const getRefinedSelector = (element: HTMLElement): string => {
+    if (!element || !element.tagName) return '';
+
     if (element.id) {
       return `#${element.id}`;
     }
@@ -136,6 +141,7 @@ export default function IframeViewer({
     let depth = 0;
 
     while (current && current.parentElement && depth < 8) {
+      if (!current.tagName) break;
       let selector = current.tagName.toLowerCase();
 
       if (current.className && typeof current.className === 'string') {
@@ -164,7 +170,7 @@ export default function IframeViewer({
       if (depth >= 8) break;
     }
 
-    return path.join(' > ') || element.tagName.toLowerCase();
+    return path.join(' > ') || (element.tagName ? element.tagName.toLowerCase() : '');
   };
 
   const handleIframeClick = useCallback((e: Event) => {
@@ -172,6 +178,7 @@ export default function IframeViewer({
     if (!currentMode) return;
 
     const target = e.target as HTMLElement;
+    if (!target || !target.tagName) return;
 
     let selector: string;
     if (hoveredElement && (target === hoveredElement || target.contains(hoveredElement) || hoveredElement.contains(target))) {
@@ -227,6 +234,8 @@ export default function IframeViewer({
 
   const handleIframeMouseOver = useCallback((e: Event) => {
     const target = e.target as HTMLElement;
+    if (!target || !target.tagName) return;
+
     const selector = getSelector(target);
 
     if (currentMode && !isElementSelected(selector)) {
@@ -244,6 +253,8 @@ export default function IframeViewer({
 
   const handleIframeMouseOut = useCallback((e: Event) => {
     const target = e.target as HTMLElement;
+    if (!target || !target.tagName) return;
+
     const selector = getSelector(target);
 
     if (!isElementSelected(selector)) {
