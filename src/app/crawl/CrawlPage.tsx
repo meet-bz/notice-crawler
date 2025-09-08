@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 
 export default function CrawlPage() {
   const searchParams = useSearchParams();
@@ -21,13 +21,13 @@ export default function CrawlPage() {
   const [inputUrl, setInputUrl] = useState('');
   const [allowScripts, setAllowScripts] = useState(false);
   const [extractedData, setExtractedData] = useState<{ [key: string]: string }>({});
-  const colorMap: { [key: string]: string } = {
+  const colorMap = useMemo<{ [key: string]: string }>(() => ({
     번호: 'blue',
     제목: 'green',
     날짜: 'yellow',
     조회수: 'orange',
     링크: 'purple'
-  };
+  }), []);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
@@ -55,6 +55,21 @@ export default function CrawlPage() {
       setIsAnalyzing(false);
     }
   };
+
+  const getElementSelectedType = useCallback((selector: string): string | null => {
+    for (const [type, sel] of Object.entries(selectors)) {
+      if (sel.split(',').map(s => s.trim()).includes(selector)) {
+        return type;
+      }
+    }
+    return null;
+  }, [selectors]);
+
+  const isElementSelected = useCallback((selector: string): boolean => {
+    return Object.values(selectors).some(sel =>
+      sel.split(',').map(s => s.trim()).includes(selector)
+    );
+  }, [selectors]);
 
   const handleIframeClick = useCallback((e: Event) => {
     e.preventDefault();
@@ -97,7 +112,7 @@ export default function CrawlPage() {
         }
       }
     });
-  }, [currentMode, selectors, colorMap]);
+  }, [currentMode, getElementSelectedType, colorMap]);
 
   const handleIframeMouseOver = useCallback((e: Event) => {
     const target = e.target as HTMLElement;
@@ -110,7 +125,7 @@ export default function CrawlPage() {
       target.setAttribute('data-original-border', originalBorder);
       target.style.border = `2px solid ${colorMap[currentMode] || 'gray'}`;
     }
-  }, [currentMode, selectors, colorMap]);
+  }, [currentMode, isElementSelected, colorMap]);
 
   const handleIframeMouseOut = useCallback((e: Event) => {
     const target = e.target as HTMLElement;
@@ -132,22 +147,7 @@ export default function CrawlPage() {
         }
       }
     }
-  }, [selectors, colorMap]);
-
-  const getElementSelectedType = (selector: string): string | null => {
-    for (const [type, sel] of Object.entries(selectors)) {
-      if (sel.split(',').map(s => s.trim()).includes(selector)) {
-        return type;
-      }
-    }
-    return null;
-  };
-
-  const isElementSelected = (selector: string): boolean => {
-    return Object.values(selectors).some(sel =>
-      sel.split(',').map(s => s.trim()).includes(selector)
-    );
-  };
+  }, [isElementSelected, getElementSelectedType, colorMap]);
 
   useEffect(() => {
     if (iframeRef.current && html) {
@@ -175,23 +175,23 @@ export default function CrawlPage() {
     }
   }, [selectors, html]);
 
-  // 선택 모드 변경 시 iframe 이벤트 리스너 업데이트
+  // 선택 모드 변경 시 iframe 이벤트 리스너 업데이트 (최적화)
   useEffect(() => {
     if (iframeRef.current && html) {
       const doc = iframeRef.current.contentDocument;
       if (doc) {
-        // 기존 이벤트 리스너 제거
+        // 콜백 함수가 변경되었으므로 이벤트 리스너를 업데이트
+        // 기존 리스너 제거 후 새 리스너 추가
         doc.removeEventListener('click', handleIframeClick);
         doc.removeEventListener('mouseover', handleIframeMouseOver);
         doc.removeEventListener('mouseout', handleIframeMouseOut);
 
-        // 최신 콜백 함수로 이벤트 리스너 다시 추가
         doc.addEventListener('click', handleIframeClick);
         doc.addEventListener('mouseover', handleIframeMouseOver);
         doc.addEventListener('mouseout', handleIframeMouseOut);
       }
     }
-  }, [currentMode, handleIframeClick, handleIframeMouseOver, handleIframeMouseOut]);
+  }, [html, handleIframeClick, handleIframeMouseOver, handleIframeMouseOut]);
 
   const handleCrawl = async () => {
     const activeSelectors = Object.values(selectors).filter(s => s.trim() !== '');
@@ -277,13 +277,7 @@ export default function CrawlPage() {
     return path.join(' > ') || element.tagName.toLowerCase();
   };
 
-  const updateSelector = (type: string, selector: string) => {
-    setSelectors(prev => ({ ...prev, [type]: selector }));
-    // CSS 변경 시 iframe 내 요소들 스타일 업데이트
-    setTimeout(() => updateIframeStyles(), 0);
-  };
-
-  const updateIframeStyles = () => {
+  const updateIframeStyles = useCallback(() => {
     if (iframeRef.current && html) {
       const doc = iframeRef.current.contentDocument;
       if (doc) {
@@ -307,7 +301,13 @@ export default function CrawlPage() {
         });
       }
     }
-  };
+  }, [html, selectors, colorMap]);
+
+  const updateSelector = useCallback((type: string, selector: string) => {
+    setSelectors(prev => ({ ...prev, [type]: selector }));
+    // CSS 변경 시 iframe 내 요소들 스타일 업데이트
+    setTimeout(() => updateIframeStyles(), 0);
+  }, [updateIframeStyles]);
 
   const combineSelectors = (existing: string, newSelector: string): string => {
     if (!existing) return newSelector;
@@ -489,21 +489,11 @@ export default function CrawlPage() {
             if (iframeRef.current) {
               const doc = iframeRef.current.contentDocument;
               if (doc) {
-                // 기존 이벤트 리스너 제거
-                doc.removeEventListener('click', handleIframeClick);
-                doc.removeEventListener('mouseover', handleIframeMouseOver);
-                doc.removeEventListener('mouseout', handleIframeMouseOut);
-
                 // 높이 자동 조정
                 const body = doc.body;
                 const html = doc.documentElement;
                 const height = Math.max(body.scrollHeight, body.offsetHeight, html.clientHeight, html.scrollHeight, html.offsetHeight);
                 iframeRef.current.style.height = height + 'px';
-
-                // 요소 선택 기능 추가 (최신 콜백 함수 사용)
-                doc.addEventListener('click', handleIframeClick);
-                doc.addEventListener('mouseover', handleIframeMouseOver);
-                doc.addEventListener('mouseout', handleIframeMouseOut);
 
                 // 스타일 업데이트
                 updateIframeStyles();
