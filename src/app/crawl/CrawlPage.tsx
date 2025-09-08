@@ -1,17 +1,17 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 
 export default function CrawlPage() {
   const searchParams = useSearchParams();
   const url = searchParams.get('url');
   const [html, setHtml] = useState('');
-  const [selectedSelectors, setSelectedSelectors] = useState<string[]>([]);
+  const [selectors, setSelectors] = useState<{ type: string; selector: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [recipient, setRecipient] = useState('');
-  const htmlContainerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     if (url) {
@@ -30,70 +30,62 @@ export default function CrawlPage() {
   }, [url]);
 
   useEffect(() => {
-    if (html && htmlContainerRef.current) {
-      // 요소 선택 기능 추가 - 크롤링된 HTML 컨테이너에만 적용
-      const handleClick = (e: Event) => {
-        e.preventDefault();
-        const target = e.target as HTMLElement;
-        
-        // 크롤링된 HTML 컨테이너 내부의 요소인지 확인
-        if (htmlContainerRef.current && htmlContainerRef.current.contains(target)) {
-          const selector = getSelector(target);
-          setSelectedSelectors(prev => 
-            prev.includes(selector) 
-              ? prev.filter(s => s !== selector) 
-              : [...prev, selector]
-          );
-        }
-      };
+    if (iframeRef.current) {
+      const doc = iframeRef.current.contentDocument;
+      if (doc) {
+        const allElements = doc.querySelectorAll('*');
+        allElements.forEach(el => (el as HTMLElement).style.border = '');
 
-      const handleMouseOver = (e: Event) => {
-        const target = e.target as HTMLElement;
-        const selector = getSelector(target);
-        if (!selectedSelectors.includes(selector)) {
-          target.style.border = '2px solid gray';
-        }
-      };
-
-      const handleMouseOut = (e: Event) => {
-        const target = e.target as HTMLElement;
-        const selector = getSelector(target);
-        if (!selectedSelectors.includes(selector)) {
-          target.style.border = '';
-        }
-      };
-
-      // 컨테이너에 이벤트 리스너 추가
-      const container = htmlContainerRef.current;
-      container.addEventListener('click', handleClick);
-      container.addEventListener('mouseover', handleMouseOver);
-      container.addEventListener('mouseout', handleMouseOut);
-      
-      return () => {
-        container.removeEventListener('click', handleClick);
-        container.removeEventListener('mouseover', handleMouseOver);
-        container.removeEventListener('mouseout', handleMouseOut);
-      };
+        selectors.forEach(sel => {
+          try {
+            const elements = doc.querySelectorAll(sel.selector);
+            elements.forEach(el => (el as HTMLElement).style.border = '2px solid red');
+          } catch (e) {
+            // 유효하지 않은 셀렉터 무시
+          }
+        });
+      }
     }
-  }, [html, selectedSelectors]);
+  }, [selectors, html]);
 
-  useEffect(() => {
-    if (htmlContainerRef.current) {
-      // 모든 요소 border 초기화
-      const allElements = htmlContainerRef.current.querySelectorAll('*');
-      allElements.forEach(el => (el as HTMLElement).style.border = '');
-      
-      // 선택된 셀렉터들에 border 추가
-      selectedSelectors.forEach(sel => {
-        try {
-          const elements = htmlContainerRef.current!.querySelectorAll(sel);
-          elements.forEach(el => (el as HTMLElement).style.border = '2px solid red');
-        } catch (e) {
-          // 유효하지 않은 셀렉터 무시
-        }
+  const handleCrawl = async () => {
+    if (selectors.length === 0) {
+      alert('요소를 추가하세요.');
+      return;
+    }
+    setShowModal(true);
+  };
+
+  const handleSend = async () => {
+    if (!recipient) {
+      alert('이메일 주소를 입력하세요.');
+      return;
+    }
+    // 크롤링 API 호출
+    const res = await fetch('/api/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, selectors: selectors.map(s => s.selector) }),
+    });
+    const data = await res.json();
+    if (data.content) {
+      // 이메일 전송
+      const sendRes = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: data.content, url, email: recipient }),
       });
+      if (sendRes.ok) {
+        alert('크롤링 완료 및 전송됨');
+        setShowModal(false);
+        setRecipient('');
+      } else {
+        alert('전송 실패');
+      }
+    } else {
+      alert('추출 실패');
     }
-  }, [selectedSelectors, html]);
+  };
 
   const getSelector = (element: HTMLElement): string => {
     // ID가 있으면 가장 우선
@@ -137,43 +129,16 @@ export default function CrawlPage() {
     return path.join(' > ') || element.tagName.toLowerCase();
   };
 
-  const handleCrawl = async () => {
-    if (selectedSelectors.length === 0) {
-      alert('요소를 선택하세요.');
-      return;
-    }
-    setShowModal(true);
+  const addSelector = (type: string) => {
+    setSelectors(prev => [...prev, { type, selector: '' }]);
   };
 
-  const handleSend = async () => {
-    if (!recipient) {
-      alert('이메일 주소를 입력하세요.');
-      return;
-    }
-    // 크롤링 API 호출
-    const res = await fetch('/api/extract', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, selector: selectedSelectors }),
-    });
-    const data = await res.json();
-    if (data.content) {
-      // 이메일 전송
-      const sendRes = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: data.content, url, email: recipient }),
-      });
-      if (sendRes.ok) {
-        alert('크롤링 완료 및 전송됨');
-        setShowModal(false);
-        setRecipient('');
-      } else {
-        alert('전송 실패');
-      }
-    } else {
-      alert('추출 실패');
-    }
+  const updateSelector = (index: number, selector: string) => {
+    setSelectors(prev => prev.map((s, i) => i === index ? { ...s, selector } : s));
+  };
+
+  const removeSelector = (index: number) => {
+    setSelectors(prev => prev.filter((_, i) => i !== index));
   };
 
   if (loading) return <div>로딩 중...</div>;
@@ -182,16 +147,81 @@ export default function CrawlPage() {
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-4">크롤링 페이지</h1>
       <p>URL: {url}</p>
-      <p>선택된 항목 수: {selectedSelectors.length}</p>
-      <button onClick={handleCrawl} className="bg-green-500 text-white p-2 rounded mb-4" disabled={selectedSelectors.length === 0}>
+      <p>추가된 항목 수: {selectors.length}</p>
+      <div className="mb-4">
+        <button onClick={() => addSelector('번호')} className="bg-blue-500 text-white p-2 rounded mr-2">번호 추가</button>
+        <button onClick={() => addSelector('제목')} className="bg-blue-500 text-white p-2 rounded mr-2">제목 추가</button>
+        <button onClick={() => addSelector('날짜')} className="bg-blue-500 text-white p-2 rounded mr-2">날짜 추가</button>
+        <button onClick={() => addSelector('조회수')} className="bg-blue-500 text-white p-2 rounded mr-2">조회수 추가</button>
+        <button onClick={() => addSelector('링크')} className="bg-blue-500 text-white p-2 rounded mr-2">링크 추가</button>
+      </div>
+      <button onClick={handleCrawl} className="bg-green-500 text-white p-2 rounded mb-4" disabled={selectors.length === 0}>
         크롤링 실행
       </button>
-      <div
-        ref={htmlContainerRef}
-        dangerouslySetInnerHTML={{ __html: html }}
-        className="border p-4 max-h-96 overflow-auto"
-        style={{ cursor: 'pointer' }}
-      />
+      <div className="mb-4">
+        {selectors.map((sel, index) => (
+          <div key={index} className="flex items-center mb-2">
+            <span className="mr-2">{sel.type}:</span>
+            <input
+              type="text"
+              value={sel.selector}
+              onChange={(e) => updateSelector(index, e.target.value)}
+              placeholder="CSS Selector 입력"
+              className="border p-2 flex-1 mr-2"
+            />
+            <button onClick={() => removeSelector(index)} className="bg-red-500 text-white p-2 rounded">제거</button>
+          </div>
+        ))}
+      </div>
+      <div className="border p-4 max-h-96 overflow-auto">
+        <iframe
+          ref={iframeRef}
+          srcDoc={html}
+          className="w-full h-full"
+          sandbox="allow-same-origin"
+          onLoad={() => {
+            if (iframeRef.current) {
+              const doc = iframeRef.current.contentDocument;
+              if (doc) {
+                // 요소 선택 기능 추가
+                const handleClick = (e: Event) => {
+                  e.preventDefault();
+                  const target = e.target as HTMLElement;
+                  const selector = getSelector(target);
+                  setSelectors(prev => {
+                    const existing = prev.find(s => s.selector === selector);
+                    if (existing) {
+                      return prev.filter(s => s.selector !== selector);
+                    } else {
+                      return [...prev, { type: '선택', selector }];
+                    }
+                  });
+                };
+
+                const handleMouseOver = (e: Event) => {
+                  const target = e.target as HTMLElement;
+                  const selector = getSelector(target);
+                  if (!selectors.some(s => s.selector === selector)) {
+                    target.style.border = '2px solid gray';
+                  }
+                };
+
+                const handleMouseOut = (e: Event) => {
+                  const target = e.target as HTMLElement;
+                  const selector = getSelector(target);
+                  if (!selectors.some(s => s.selector === selector)) {
+                    target.style.border = '';
+                  }
+                };
+
+                doc.addEventListener('click', handleClick);
+                doc.addEventListener('mouseover', handleMouseOver);
+                doc.addEventListener('mouseout', handleMouseOut);
+              }
+            }
+          }}
+        />
+      </div>
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white p-6 rounded">
